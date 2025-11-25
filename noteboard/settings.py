@@ -50,6 +50,13 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://testnote-1.onrender.com",
+    "https://www.testnote-1.onrender.com",
+    "https://*.onrender.com",
+]
+
+
 ROOT_URLCONF = 'noteboard.urls'
 
 TEMPLATES = [
