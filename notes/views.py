@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.db.models import Q, Count
+from django.db.models import Q, Count   # 👈 IMPORTANTE: Q
 from django.urls import reverse
 from django.http import HttpResponseForbidden
 from django.contrib import messages
@@ -157,8 +157,8 @@ def private_notes(request):
         )
     else:  # "todas"
         notes_qs = Note.objects.filter(
-            Q(recipient=request.user)
-            | Q(author=request.user, recipient__isnull=False)
+            Q(recipient=request.user) |
+            Q(author=request.user, recipient__isnull=False)
         )
 
     notes_qs = notes_qs.select_related("author", "recipient")
@@ -302,7 +302,6 @@ def invitation_admin(request):
 @login_required
 def moderator_panel(request):
     """Panel para asignar y quitar el rol de moderador (solo superusuario)."""
-    # ✅ Solo superusuario puede entrar aquí
     if not request.user.is_superuser:
         return HttpResponseForbidden("Solo el superusuario puede gestionar moderadores.")
 
@@ -327,7 +326,6 @@ def moderator_panel(request):
                 messages.success(request, f"{target_user.username} ahora es moderador.")
 
         elif action == "remove":
-            # Opcional: impedir que te quites el rol a ti mismo
             if target_user == request.user:
                 messages.error(request, "No puedes quitarte el rol de moderador a ti mismo.")
             elif mod_group not in target_user.groups.all():

@@ -101,21 +101,57 @@
 {% if page_obj.paginator.num_pages > 1 %}
 <nav class="mt-4">
   <ul class="pagination justify-content-center">
+
+    {# Anterior #}
     <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
-      <a class="page-link" href="?filtro={{ filtro }}&page={{ page_obj.previous_page_number }}">Anterior</a>
+      {% if page_obj.has_previous %}
+        <a class="page-link"
+           href="?filtro={{ filtro }}&page={{ page_obj.previous_page_number }}">
+          Anterior
+        </a>
+      {% else %}
+        <span class="page-link">Anterior</span>
+      {% endif %}
     </li>
 
+    {# Páginas #}
     {% for num in page_obj.paginator.page_range %}
       <li class="page-item {% if page_obj.number == num %}active{% endif %}">
-        <a class="page-link" href="?filtro={{ filtro }}&page={{ num }}">{{ num }}</a>
+        {% if page_obj.number == num %}
+          <span class="page-link">{{ num }}</span>
+        {% else %}
+          <a class="page-link" href="?filtro={{ filtro }}&page={{ num }}">{{ num }}</a>
+        {% endif %}
       </li>
     {% endfor %}
 
+    {# Siguiente #}
     <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
-      <a class="page-link" href="?filtro={{ filtro }}&page={{ page_obj.next_page_number }}">Siguiente</a>
+      {% if page_obj.has_next %}
+        <a class="page-link"
+           href="?filtro={{ filtro }}&page={{ page_obj.next_page_number }}">
+          Siguiente
+        </a>
+      {% else %}
+        <span class="page-link">Siguiente</span>
+      {% endif %}
     </li>
+
   </ul>
 </nav>
+{% endif %}
+
+{# Si hubo errores al enviar, reabrir el modal automáticamente #}
+{% if form.errors %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const modalEl = document.getElementById('createPrivateNoteModal');
+    if (modalEl && window.bootstrap) {
+      const modal = new bootstrap.Modal(modalEl);
+      modal.show();
+    }
+  });
+</script>
 {% endif %}
 
 {% endblock %}
