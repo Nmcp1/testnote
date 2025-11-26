@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load tz %}
+
+{% block content %}
+
+<h2 class="fw-bold mb-3">Notificaciones</h2>
+
+{% if notifications %}
+  <div class="list-group">
+    {% for n in notifications %}
+      <a href="{{ n.url|default:'#' }}"
+         class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+        <div>
+          <div>{{ n.message }}</div>
+          <div class="small text-muted">
+            {{ n.created_at|localtime|date:"d/m/Y H:i" }}
+          </div>
+        </div>
+        {% if not n.is_read %}
+          <span class="badge bg-danger">Nueva</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-muted">No tienes notificaciones por ahora.</p>
+{% endif %}
+
+{% endblock %}

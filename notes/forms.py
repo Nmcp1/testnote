@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
-from .models import Note, InvitationCode
+from .models import Note, InvitationCode, NoteReply
 
 
 class NoteForm(forms.ModelForm):
@@ -41,7 +41,6 @@ class PrivateNoteForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # Solo permitir otros usuarios como destinatarios
         if user is not None:
             self.fields['recipient'].queryset = User.objects.exclude(pk=user.pk)
 
@@ -49,6 +48,25 @@ class PrivateNoteForm(forms.ModelForm):
         text = self.cleaned_data['text']
         if len(text) > 100:
             raise forms.ValidationError('La nota no puede tener más de 100 caracteres.')
+        return text
+
+
+class NoteReplyForm(forms.ModelForm):
+    class Meta:
+        model = NoteReply
+        fields = ['text']
+        widgets = {
+            'text': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Escribe tu comentario (máx. 200 caracteres)...'
+            })
+        }
+
+    def clean_text(self):
+        text = self.cleaned_data['text']
+        if len(text) > 200:
+            raise forms.ValidationError('El comentario no puede tener más de 200 caracteres.')
         return text
 
 
@@ -83,4 +101,3 @@ class RegistrationForm(UserCreationForm):
 
         self.invitation_instance = invitation
         return code
-

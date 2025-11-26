@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2 class="fw-bold mb-3">Gestión de moderadores</h2>
+<p class="text-muted">Solo el superusuario puede acceder a esta página.</p>
+
+<div class="mb-3">
+  <a href="{% url 'invitation_admin' %}" class="btn btn-outline-primary me-2">
+    Códigos de invitación
+  </a>
+  <a href="{% url 'moderator_panel' %}" class="btn btn-primary">
+    Moderadores
+  </a>
+</div>
+
+<div class="row">
+  <div class="col-md-6 mb-4">
+    <h4>Usuarios moderadores</h4>
+    {% if moderators %}
+      <ul class="list-group">
+        {% for u in moderators %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <strong>{{ u.username }}</strong>
+              {% if u.is_superuser %}
+                <span class="badge bg-warning text-dark ms-2">Superusuario</span>
+              {% endif %}
+            </div>
+            {% if u != request.user %}
+              <form method="post" class="ms-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="user_id" value="{{ u.id }}">
+                <button class="btn btn-sm btn-danger">Quitar moderador</button>
+              </form>
+            {% else %}
+              <span class="badge bg-secondary">Tú</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No hay moderadores asignados.</p>
+    {% endif %}
+  </div>
+
+  <div class="col-md-6 mb-4">
+    <h4>Otros usuarios</h4>
+    {% if non_moderators %}
+      <ul class="list-group">
+        {% for u in non_moderators %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <strong>{{ u.username }}</strong>
+              {% if u.is_superuser %}
+                <span class="badge bg-warning text-dark ms-2">Superusuario</span>
+              {% endif %}
+            </div>
+            <form method="post" class="ms-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="add">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <button class="btn btn-sm btn成功 btn-success">Hacer moderador</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No hay más usuarios.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

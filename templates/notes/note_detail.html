@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% load tz %}
+
+{% block content %}
+
+<a href="{% url 'home' %}" class="btn btn-link mb-3">&larr; Volver al muro público</a>
+
+<div class="card shadow mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>{{ note.author.username }}</strong>
+    <span class="small text-muted">{{ note.created_at|localtime|date:"d/m/Y H:i" }}</span>
+  </div>
+
+  <div class="card-body">
+    <p class="fs-5">{{ note.text }}</p>
+  </div>
+
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <div class="d-flex gap-2">
+      <span class="badge bg-secondary">
+        💬 {{ note.replies_count }} comentarios
+      </span>
+      <span class="badge bg-danger">
+        ❤️ {{ note.likes_count }} likes
+      </span>
+    </div>
+
+    <div>
+      {% if user.is_authenticated %}
+        <form method="post" action="{% url 'toggle_like' note.id %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit"
+                  class="btn btn-sm {% if user_liked %}btn-danger{% else %}btn-outline-danger{% endif %}">
+            {% if user_liked %}Quitar like{% else %}Dar like{% endif %}
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# FORMULARIO DE REPLY #}
+<div class="card mb-3">
+  <div class="card-body">
+    <h5 class="card-title">Escribir un comentario</h5>
+    {% if user.is_authenticated %}
+      <form method="post">
+        {% csrf_token %}
+        {{ form.text.label_tag }}
+        {{ form.text }}
+        {% if form and form.errors %}
+          <div class="text-danger small mt-1">
+            {{ form.errors }}
+          </div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary mt-2">
+          Comentar
+        </button>
+      </form>
+    {% else %}
+      <p class="text-muted">
+        Debes <a href="{% url 'login' %}?next={{ request.path }}">iniciar sesión</a> para comentar.
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+{# LISTA DE COMENTARIOS EN SCROLL #}
+<div class="card">
+  <div class="card-header">
+    Comentarios
+  </div>
+  <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+    {% if replies %}
+      {% for reply in replies %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between">
+            <strong>{{ reply.author.username }}</strong>
+            <span class="small text-muted">
+              {{ reply.created_at|localtime|date:"d/m/Y H:i" }}
+            </span>
+          </div>
+          <p class="mb-1">{{ reply.text }}</p>
+          <hr class="mt-1">
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted">Aún no hay comentarios. ¡Sé el primero en comentar!</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

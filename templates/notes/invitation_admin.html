@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load tz %}
+
+{% block content %}
+
+<h2 class="fw-bold mb-3">Administración de códigos de invitación</h2>
+<p class="text-muted">Solo moderadores pueden ver esta página.</p>
+
+<div class="mb-3">
+  <a href="{% url 'invitation_admin' %}" class="btn btn-primary me-2">
+    Códigos de invitación
+  </a>
+
+  {# Solo el superusuario ve el botón de moderadores #}
+  {% if request.user.is_superuser %}
+    <a href="{% url 'moderator_panel' %}" class="btn btn-outline-primary">
+      Moderadores
+    </a>
+  {% endif %}
+</div>
+
+<div class="mb-4">
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create">
+    <button class="btn btn-success rounded-pill">
+      ➕ Generar nuevo código
+    </button>
+  </form>
+</div>
+
+<div class="row">
+  <div class="col-md-6 mb-4">
+    <h4>Códigos disponibles</h4>
+    {% if unused_codes %}
+      <ul class="list-group">
+        {% for code in unused_codes %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <strong>{{ code.code }}</strong>
+              <div class="small text-muted">
+                Creado por {{ code.created_by.username }} el
+                {{ code.created_at|localtime|date:"d/m/Y H:i" }}
+              </div>
+            </div>
+            <form method="post" class="ms-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="code_id" value="{{ code.id }}">
+              <button class="btn btn-sm btn-danger">
+                Eliminar
+              </button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No hay códigos disponibles.</p>
+    {% endif %}
+  </div>
+
+  <div class="col-md-6 mb-4">
+    <h4>Códigos usados</h4>
+    {% if used_codes %}
+      <ul class="list-group">
+        {% for code in used_codes %}
+          <li class="list-group-item">
+            <strong>{{ code.code }}</strong>
+            <div class="small text-muted">
+              Creado por {{ code.created_by.username }} ·
+              Usado por {{ code.used_by.username }} ·
+              {{ code.used_at|localtime|date:"d/m/Y H:i" }}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">Aún no hay códigos usados.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

@@ -13,7 +13,7 @@
       <span class="badge bg-success mt-2">Conectado</span>
     {% else %}
       <span class="badge bg-secondary mt-2">
-        Solo lectura (debes entrar para publicar y likear)
+        Solo lectura (debes entrar para publicar, likear y comentar)
       </span>
     {% endif %}
   </div>
@@ -21,7 +21,7 @@
 
 {# FILTRO DE ORDEN #}
 <div class="mb-3 d-flex align-items-center justify-content-between flex-wrap">
-  <div class="btn-group" role="group" aria-label="Orden notas">
+  <div class="btn-group" role="group">
     <a href="?orden=fecha"
        class="btn {% if orden == 'fecha' %}btn-primary{% else %}btn-outline-primary{% endif %}">
       Ordenar por antigüedad
@@ -70,12 +70,8 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-            Cancelar
-          </button>
-          <button type="submit" class="btn btn-primary">
-            Publicar
-          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Publicar</button>
         </div>
       </form>
 
@@ -88,30 +84,42 @@
 <div class="row g-3">
   {% for note in page_obj %}
     <div class="col-md-4">
-      <div class="card shadow-sm h-100">
+      <div class="card shadow-sm h-100 d-flex flex-column">
 
         <div class="card-header">
           <strong>{{ note.author.username }}</strong>
         </div>
 
-        <div class="card-body">
-          <p class="card-text">{{ note.text }}</p>
-        </div>
+        {# CLIC EN EL CUERPO ABRE EL DETALLE #}
+        <a href="{% url 'note_detail' note.id %}" class="text-decoration-none text-reset flex-grow-1">
+          <div class="card-body d-flex flex-column flex-grow-1">
+            <p class="card-text">{{ note.text }}</p>
+          </div>
+        </a>
 
-        <div class="card-footer d-flex justify-content-between align-items-center small text-muted">
+        <div class="card-footer d-flex justify-content-between align-items-center small text-muted mt-auto">
           <span>{{ note.created_at|localtime|date:"d/m/Y H:i" }}</span>
 
-          {% if user.is_authenticated %}
-            <form method="post" action="{% url 'toggle_like' note.id %}">
-              {% csrf_token %}
-              <button type="submit"
-                      class="btn btn-sm {% if note.id in liked_ids %}btn-danger{% else %}btn-outline-danger{% endif %}">
-                ❤️ {{ note.likes_count }}
-              </button>
-            </form>
-          {% else %}
-            <span class="text-danger">❤️ {{ note.likes_count }}</span>
-          {% endif %}
+          <div class="d-flex gap-2">
+
+            <a href="{% url 'note_detail' note.id %}"
+               class="btn btn-sm btn-outline-secondary">
+              💬 {{ note.replies_count }}
+            </a>
+
+            {% if user.is_authenticated %}
+              <form method="post" action="{% url 'toggle_like' note.id %}">
+                {% csrf_token %}
+                <button type="submit"
+                        class="btn btn-sm {% if note.id in liked_ids %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                  ❤️ {{ note.likes_count }}
+                </button>
+              </form>
+            {% else %}
+              <span class="text-danger">❤️ {{ note.likes_count }}</span>
+            {% endif %}
+
+          </div>
         </div>
 
       </div>
@@ -121,7 +129,7 @@
   {% endfor %}
 </div>
 
-{# PAGINACIÓN (conservando orden) #}
+{# PAGINACIÓN #}
 {% if page_obj.paginator.num_pages > 1 %}
 <nav aria-label="Paginación de notas" class="mt-4">
   <ul class="pagination justify-content-center">
@@ -156,13 +164,13 @@
 </nav>
 {% endif %}
 
-{# Si hay errores, abrir modal automáticamente #}
+{# Si hay errores, mostrar modal #}
 {% if form and form.errors %}
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    var modalEl = document.getElementById('createNoteModal');
+    const modalEl = document.getElementById('createNoteModal');
     if (modalEl && window.bootstrap) {
-      var modal = new bootstrap.Modal(modalEl);
+      const modal = new bootstrap.Modal(modalEl);
       modal.show();
     }
   });

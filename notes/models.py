@@ -82,3 +82,46 @@ class NoteLike(models.Model):
 
     def __str__(self):
         return f'{self.user.username} ♥ {self.note.id}'
+
+
+class NoteReply(models.Model):
+    note = models.ForeignKey(
+        Note,
+        on_delete=models.CASCADE,
+        related_name='replies'
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='note_replies'
+    )
+    text = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'{self.author.username} → Note {self.note_id}: {self.text[:20]}'
+
+class Notification(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    message = models.CharField(max_length=255)
+    url = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="URL interna para ir al detalle de la notificación."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        estado = "NUEVA" if not self.is_read else "leída"
+        return f"{self.user.username} - {self.message} ({estado})"
