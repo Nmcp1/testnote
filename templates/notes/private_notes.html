@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load tz %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold">Notas privadas 🔒</h2>
+  <span class="badge bg-info text-dark">Solo tú puedes ver esto</span>
+</div>
+
+{# BOTONES DE FILTRO #}
+<div class="btn-group mb-4" role="group">
+  <a href="?filtro=recibidas"
+     class="btn {% if filtro == 'recibidas' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+    Recibidas
+  </a>
+  <a href="?filtro=enviadas"
+     class="btn {% if filtro == 'enviadas' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+    Enviadas
+  </a>
+  <a href="?filtro=todas"
+     class="btn {% if filtro == 'todas' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+    Todas
+  </a>
+</div>
+
+<div class="mb-4">
+  <button type="button"
+          class="btn btn-success btn-lg fw-semibold rounded-pill"
+          data-bs-toggle="modal"
+          data-bs-target="#createPrivateNoteModal">
+    ➕ Enviar nota privada
+  </button>
+</div>
+
+{# MODAL PARA NUEVA NOTA PRIVADA #}
+<div class="modal fade" id="createPrivateNoteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Enviar nota privada</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <label class="fw-bold">Destinatario:</label>
+          {{ form.recipient }}
+
+          <label class="fw-bold mt-3">Mensaje:</label>
+          {{ form.text }}
+
+          {% if form.errors %}
+          <div class="text-danger mt-2 small">{{ form.errors }}</div>
+          {% endif %}
+
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success">Enviar</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+{# MURO DE NOTAS #}
+<div class="row g-3">
+  {% for note in page_obj %}
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+
+        <div class="card-header">
+          {% if note.recipient == user %}
+            <strong>De: {{ note.author.username }}</strong>
+          {% else %}
+            <strong>Para: {{ note.recipient.username }}</strong>
+          {% endif %}
+        </div>
+
+        <div class="card-body">
+          <p class="card-text">{{ note.text }}</p>
+        </div>
+
+        <div class="card-footer text-muted small">
+          {{ note.created_at|localtime|date:"d/m/Y H:i" }}
+        </div>
+
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No hay notas en este filtro.</p>
+  {% endfor %}
+</div>
+
+{# PAGINACIÓN #}
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-4">
+  <ul class="pagination justify-content-center">
+    <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+      <a class="page-link" href="?filtro={{ filtro }}&page={{ page_obj.previous_page_number }}">Anterior</a>
+    </li>
+
+    {% for num in page_obj.paginator.page_range %}
+      <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+        <a class="page-link" href="?filtro={{ filtro }}&page={{ num }}">{{ num }}</a>
+      </li>
+    {% endfor %}
+
+    <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+      <a class="page-link" href="?filtro={{ filtro }}&page={{ page_obj.next_page_number }}">Siguiente</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{% endblock %}

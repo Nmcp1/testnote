@@ -1,4 +1,3 @@
-# notes/forms.py
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
@@ -17,6 +16,34 @@ class NoteForm(forms.ModelForm):
                 'placeholder': 'Escribe tu nota (máx. 100 caracteres)...'
             })
         }
+
+    def clean_text(self):
+        text = self.cleaned_data['text']
+        if len(text) > 100:
+            raise forms.ValidationError('La nota no puede tener más de 100 caracteres.')
+        return text
+
+
+class PrivateNoteForm(forms.ModelForm):
+    class Meta:
+        model = Note
+        fields = ['recipient', 'text']
+        widgets = {
+            'recipient': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'text': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Escribe tu nota privada (máx. 100 caracteres)...'
+            })
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Solo permitir otros usuarios como destinatarios
+        if user is not None:
+            self.fields['recipient'].queryset = User.objects.exclude(pk=user.pk)
 
     def clean_text(self):
         text = self.cleaned_data['text']
@@ -56,3 +83,4 @@ class RegistrationForm(UserCreationForm):
 
         self.invitation_instance = invitation
         return code
+

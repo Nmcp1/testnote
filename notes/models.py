@@ -1,8 +1,8 @@
-# notes/models.py
 import random
 import string
 from django.db import models
 from django.contrib.auth.models import User
+
 
 def generate_random_code(length=8):
     chars = string.ascii_uppercase + string.digits
@@ -27,16 +27,11 @@ class InvitationCode(models.Model):
     used_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        # Si el código no existe, generarlo
         if not self.code:
             new_code = generate_random_code()
-
-            # Asegurar unicidad
             while InvitationCode.objects.filter(code=new_code).exists():
                 new_code = generate_random_code()
-
             self.code = new_code
-
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -45,12 +40,45 @@ class InvitationCode(models.Model):
 
 
 class Note(models.Model):
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notes')
-    text = models.CharField(max_length=100)  # hasta 100 caracteres
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notes'
+    )
+    # recipient NULL => nota pública
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='received_notes',
+        null=True,
+        blank=True
+    )
+    text = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']  # más nuevas primero
+        ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.author.username}: {self.text[:20]}'
+        kind = "privada" if self.recipient else "pública"
+        return f'{self.author.username} -> {self.recipient or "ALL"} ({kind}): {self.text[:20]}'
+
+
+class NoteLike(models.Model):
+    note = models.ForeignKey(
+        Note,
+        on_delete=models.CASCADE,
+        related_name='likes'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='note_likes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('note', 'user')
+
+    def __str__(self):
+        return f'{self.user.username} ♥ {self.note.id}'
