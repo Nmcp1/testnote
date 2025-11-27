@@ -452,7 +452,7 @@ def mine_game(request):
                 result=MineGameResult.RESULT_RETIRE,
             )
 
-            bonus = score // 10
+            bonus = score // 5
             if bonus > 0:
                 profile = get_or_create_profile(request.user)
                 profile.coins += bonus
