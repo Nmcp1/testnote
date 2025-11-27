@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="fw-bold mb-0">Inventario RPG</h2>
+    <p class="text-muted mb-0">Equipa tus objetos y revisa tus estadísticas.</p>
+  </div>
+  <div class="text-end">
+    <div class="fw-bold">Monedas: <span class="badge bg-warning text-dark">{{ profile.coins }}</span></div>
+    <small class="text-muted">Usuario: {{ request.user.username }}</small>
+  </div>
+</div>
+
+<div class="mb-3">
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill me-1">⬅ Volver al hub</a>
+  <a href="{% url 'rpg_shop' %}" class="btn btn-outline-primary btn-sm rounded-pill me-1">🛒 Tienda</a>
+  <a href="{% url 'rpg_gacha' %}" class="btn btn-outline-success btn-sm rounded-pill me-1">🎲 Gacha</a>
+  <a href="{% url 'rpg_tower' %}" class="btn btn-outline-dark btn-sm rounded-pill">🗼 Torre</a>
+</div>
+
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Estadísticas totales del jugador</div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col-4 mb-2">
+            <div class="fw-bold">❤️ Vida</div>
+            <div>{{ stats.hp }}</div>
+          </div>
+          <div class="col-4 mb-2">
+            <div class="fw-bold">⚔ Ataque</div>
+            <div>{{ stats.attack }}</div>
+          </div>
+          <div class="col-4 mb-2">
+            <div class="fw-bold">🛡 Defensa</div>
+            <div>{{ stats.defense }}</div>
+          </div>
+          <div class="col-4">
+            <div class="fw-bold">💥 Crit%</div>
+            <div>{{ stats.crit_chance|floatformat:1 }}%</div>
+          </div>
+          <div class="col-4">
+            <div class="fw-bold">💨 Esquive%</div>
+            <div>{{ stats.dodge_chance|floatformat:1 }}%</div>
+          </div>
+          <div class="col-4">
+            <div class="fw-bold">⚡ Velocidad</div>
+            <div>{{ stats.speed }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 mt-3 mt-md-0">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-bold">Equipo actual</div>
+      <div class="card-body small">
+        <div class="row">
+          <div class="col-6 mb-2"><strong>Arma:</strong> {{ profile.equipped_weapon|default:"(ninguna)" }}</div>
+          <div class="col-6 mb-2"><strong>Casco:</strong> {{ profile.equipped_helmet|default:"(ninguno)" }}</div>
+          <div class="col-6 mb-2"><strong>Armadura:</strong> {{ profile.equipped_armor|default:"(ninguna)" }}</div>
+          <div class="col-6 mb-2"><strong>Pantalones:</strong> {{ profile.equipped_pants|default:"(ningunos)" }}</div>
+          <div class="col-6 mb-2"><strong>Botas:</strong> {{ profile.equipped_boots|default:"(ningunas)" }}</div>
+          <div class="col-6 mb-2"><strong>Escudo:</strong> {{ profile.equipped_shield|default:"(ninguno)" }}</div>
+          <div class="col-12 mt-2">
+            <strong>Amuletos:</strong><br>
+            <span class="d-block">1) {{ profile.equipped_amulet1|default:"(vacío)" }}</span>
+            <span class="d-block">2) {{ profile.equipped_amulet2|default:"(vacío)" }}</span>
+            <span class="d-block">3) {{ profile.equipped_amulet3|default:"(vacío)" }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h4 class="fw-bold mb-2">Objetos del inventario</h4>
+
+<div class="mb-3">
+  <div class="btn-group" role="group" aria-label="Filtro por tipo">
+    <a href="?slot=all" class="btn {% if slot_filter == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Todos</a>
+    <a href="?slot=weapon" class="btn {% if slot_filter == 'weapon' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Armas</a>
+    <a href="?slot=helmet" class="btn {% if slot_filter == 'helmet' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Cascos</a>
+    <a href="?slot=armor" class="btn {% if slot_filter == 'armor' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Armaduras</a>
+    <a href="?slot=pants" class="btn {% if slot_filter == 'pants' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Pantalones</a>
+    <a href="?slot=boots" class="btn {% if slot_filter == 'boots' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Botas</a>
+    <a href="?slot=shield" class="btn {% if slot_filter == 'shield' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Escudos</a>
+    <a href="?slot=amulet" class="btn {% if slot_filter == 'amulet' %}btn-primary{% else %}btn-outline-primary{% endif %} btn-sm">Amuletos</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for item in items %}
+    <div class="col-md-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-bold small">{{ item.name }}</span>
+          <span class="badge 
+            {% if item.rarity == 'basic' %}bg-secondary
+            {% elif item.rarity == 'uncommon' %}bg-success
+            {% elif item.rarity == 'special' %}bg-info
+            {% elif item.rarity == 'epic' %}bg-primary
+            {% elif item.rarity == 'legendary' %}bg-warning text-dark
+            {% elif item.rarity == 'mythic' %}bg-danger
+            {% elif item.rarity == 'ascended' %}bg-dark
+            {% endif %}
+          ">{{ item.get_rarity_display }}</span>
+        </div>
+        <div class="card-body small">
+          <p class="mb-1"><strong>Tipo:</strong> {{ item.get_slot_display }}</p>
+          <p class="mb-1">
+            <strong>Stats:</strong><br>
+            ❤️ HP: {{ item.hp }} |
+            ⚔ ATK: {{ item.attack }} |
+            🛡 DEF: {{ item.defense }}
+          </p>
+          <p class="mb-1">
+            💥 Crit: {{ item.crit_chance|floatformat:1 }}% |
+            💨 Esquive: {{ item.dodge_chance|floatformat:1 }}% |
+            ⚡ Vel: {{ item.speed }}
+          </p>
+          <p class="text-muted mb-0"><small>Origen: {{ item.get_source_display }}</small></p>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <small class="text-muted">{{ item.created_at|date:"d/m/Y H:i" }}</small>
+          {% if item.id in equipped_ids %}
+            <span class="badge bg-success">Equipado</span>
+          {% else %}
+            <form method="post" class="m-0">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="equip">
+              <input type="hidden" name="item_id" value="{{ item.id }}">
+              <button class="btn btn-sm btn-outline-success">Equipar</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No tienes objetos en el inventario con este filtro.</p>
+  {% endfor %}
+</div>
+
+{% endblock %}

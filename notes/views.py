@@ -1,4 +1,6 @@
 import random
+from math import pow
+from datetime import date
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login as auth_login
@@ -20,6 +22,13 @@ from .models import (
     InvitationCode,
     UserProfile,
     MineGameResult,
+    CombatItem,
+    TowerProgress,
+    TowerBattleResult,
+    ItemRarity,
+    ItemSlot,
+    ItemSource,
+    GachaProbability,
 )
 from .forms import (
     NoteForm,
@@ -44,6 +53,15 @@ def user_is_moderator(user):
     ensure_moderator_group_exists()
     return user.groups.filter(name__iexact=MODERATOR_GROUP_NAME).exists()
 
+
+def get_or_create_profile(user):
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile
+
+
+# =================
+# NOTAS PÚBLICAS / PRIVADAS
+# =================
 
 def home(request):
     orden = request.GET.get("orden", "fecha")
@@ -347,10 +365,11 @@ def moderator_panel(request):
     return render(request, "notes/moderator_panel.html", context)
 
 
+# =================
+# LEADERBOARD MONEDAS
+# =================
+
 def leaderboard(request):
-    """
-    Ranking de usuarios por cantidad de monedas (perfil).
-    """
     profiles = (
         UserProfile.objects
         .select_related("user")
@@ -359,7 +378,7 @@ def leaderboard(request):
 
     current_user_profile = None
     if request.user.is_authenticated:
-        current_user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        current_user_profile = get_or_create_profile(request.user)
 
     context = {
         "profiles": profiles,
@@ -367,6 +386,10 @@ def leaderboard(request):
     }
     return render(request, "notes/leaderboard.html", context)
 
+
+# =================
+# JUEGO DE MINAS
+# =================
 
 def _new_mine_game_state():
     rows = 10
@@ -389,13 +412,6 @@ def _new_mine_game_state():
 
 @login_required
 def mine_game(request):
-    """
-    Minijuego de 10x10 con 15 minas.
-    - Casillas seguras: verde claro (+1 punto).
-    - Mina: roja, termina el juego y deja el puntaje en 0.
-    - Botón "Retirarse": guarda partida y otorga 1 moneda por cada 10 puntos.
-    - A la derecha: top 10 mayores puntuaciones y últimas 10 partidas.
-    """
     state = request.session.get(MINE_GAME_SESSION_KEY)
     if not state:
         state = _new_mine_game_state()
@@ -438,7 +454,7 @@ def mine_game(request):
 
             bonus = score // 10
             if bonus > 0:
-                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                profile = get_or_create_profile(request.user)
                 profile.coins += bonus
                 profile.save()
                 messages.success(
@@ -461,7 +477,6 @@ def mine_game(request):
     rows = state["rows"]
     cols = state["cols"]
 
-    # Lista plana de celdas para CSS Grid (10x10)
     cells = [f"{r}-{c}" for r in range(rows) for c in range(cols)]
 
     revealed_cells = state["revealed"]
@@ -491,3 +506,701 @@ def mine_game(request):
         "last_games": last_games,
     }
     return render(request, "notes/mine_game.html", context)
+
+
+# =================
+# RPG — GACHA CONFIG + STATS
+# =================
+
+# defaults por si la tabla está vacía
+DEFAULT_GACHA_PROBS = [
+    (ItemRarity.BASIC, 0.80),
+    (ItemRarity.UNCOMMON, 0.15),
+    (ItemRarity.SPECIAL, 0.04),
+    (ItemRarity.EPIC, 0.009),
+    (ItemRarity.LEGENDARY, 0.0009),
+    (ItemRarity.MYTHIC, 0.00009),
+    (ItemRarity.ASCENDED, 0.00001),
+]
+
+
+def get_gacha_probs():
+    """
+    Devuelve una lista de tuplas (rarity, prob) SIEMPRE ordenada
+    por calidad: Básica → Poco común → Especial → Épica →
+    Legendaria → Mítica → Ascendida.
+    """
+    qs = GachaProbability.objects.all()
+    if not qs.exists():
+        for rarity, prob in DEFAULT_GACHA_PROBS:
+            GachaProbability.objects.create(rarity=rarity, probability=prob)
+        qs = GachaProbability.objects.all()
+
+    # Mapeamos lo que haya en BD
+    db_map = {row.rarity: row.probability for row in qs}
+
+    ordered = []
+    for rarity, default_prob in DEFAULT_GACHA_PROBS:
+        ordered.append((rarity, db_map.get(rarity, default_prob)))
+    return ordered
+
+
+def roll_rarity():
+    probs = get_gacha_probs()
+    r = random.random()
+    acumulado = 0.0
+    for rarity, prob in probs:
+        acumulado += prob
+        if r <= acumulado:
+            return rarity
+    return probs[-1][0]
+
+
+SLOT_LABELS = {
+    ItemSlot.WEAPON: "Espada",
+    ItemSlot.HELMET: "Casco",
+    ItemSlot.ARMOR: "Armadura",
+    ItemSlot.PANTS: "Pantalones",
+    ItemSlot.BOOTS: "Botas",
+    ItemSlot.SHIELD: "Escudo",
+    ItemSlot.AMULET: "Amuleto",
+}
+
+# Tablas de stats por rareza
+WEAPON_ATK = {
+    ItemRarity.BASIC: (5, 15),
+    ItemRarity.UNCOMMON: (12, 35),
+    ItemRarity.SPECIAL: (30, 65),
+    ItemRarity.EPIC: (60, 130),
+    ItemRarity.LEGENDARY: (120, 240),
+    ItemRarity.MYTHIC: (230, 400),
+    ItemRarity.ASCENDED: (390, 650),
+}
+
+ARMOR_DEF = {
+    ItemRarity.BASIC: (2, 6),
+    ItemRarity.UNCOMMON: (5, 15),
+    ItemRarity.SPECIAL: (12, 28),
+    ItemRarity.EPIC: (25, 55),
+    ItemRarity.LEGENDARY: (50, 105),
+    ItemRarity.MYTHIC: (90, 180),
+    ItemRarity.ASCENDED: (160, 300),
+}
+
+SHIELD_DEF = {
+    ItemRarity.BASIC: (2, 5),
+    ItemRarity.UNCOMMON: (5, 12),
+    ItemRarity.SPECIAL: (10, 20),
+    ItemRarity.EPIC: (18, 40),
+    ItemRarity.LEGENDARY: (35, 70),
+    ItemRarity.MYTHIC: (60, 120),
+    ItemRarity.ASCENDED: (100, 200),
+}
+
+SHIELD_HP = {
+    ItemRarity.BASIC: (20, 40),
+    ItemRarity.UNCOMMON: (35, 70),
+    ItemRarity.SPECIAL: (60, 120),
+    ItemRarity.EPIC: (100, 200),
+    ItemRarity.LEGENDARY: (160, 300),
+    ItemRarity.MYTHIC: (260, 450),
+    ItemRarity.ASCENDED: (420, 700),
+}
+
+LIGHT_HP = {
+    ItemRarity.BASIC: (15, 30),
+    ItemRarity.UNCOMMON: (25, 50),
+    ItemRarity.SPECIAL: (40, 80),
+    ItemRarity.EPIC: (70, 140),
+    ItemRarity.LEGENDARY: (120, 240),
+    ItemRarity.MYTHIC: (200, 380),
+    ItemRarity.ASCENDED: (350, 600),
+}
+
+LIGHT_DEF = {
+    ItemRarity.BASIC: (0, 1),
+    ItemRarity.UNCOMMON: (1, 3),
+    ItemRarity.SPECIAL: (2, 6),
+    ItemRarity.EPIC: (5, 12),
+    ItemRarity.LEGENDARY: (10, 22),
+    ItemRarity.MYTHIC: (20, 40),
+    ItemRarity.ASCENDED: (35, 60),
+}
+
+LIGHT_SPEED = {
+    ItemRarity.BASIC: (0, 1),
+    ItemRarity.UNCOMMON: (1, 2),
+    ItemRarity.SPECIAL: (1, 3),
+    ItemRarity.EPIC: (2, 5),
+    ItemRarity.LEGENDARY: (3, 7),
+    ItemRarity.MYTHIC: (5, 10),
+    ItemRarity.ASCENDED: (8, 15),
+}
+
+AMULET_CRIT = {
+    ItemRarity.BASIC: (0, 1),
+    ItemRarity.UNCOMMON: (1, 4),
+    ItemRarity.SPECIAL: (3, 8),
+    ItemRarity.EPIC: (7, 15),
+    ItemRarity.LEGENDARY: (12, 22),
+    ItemRarity.MYTHIC: (18, 35),
+    ItemRarity.ASCENDED: (30, 50),
+}
+
+AMULET_DODGE = AMULET_CRIT.copy()
+
+AMULET_SPEED = {
+    ItemRarity.BASIC: (0, 1),
+    ItemRarity.UNCOMMON: (1, 3),
+    ItemRarity.SPECIAL: (2, 5),
+    ItemRarity.EPIC: (4, 9),
+    ItemRarity.LEGENDARY: (7, 14),
+    ItemRarity.MYTHIC: (12, 20),
+    ItemRarity.ASCENDED: (18, 30),
+}
+
+
+def roll_range(rng, from_gacha):
+    mn, mx = rng
+    if not from_gacha:
+        return mn
+    if mn == mx:
+        return mn
+    return random.randint(mn, mx)
+
+
+def generate_item_stats(slot, rarity, from_gacha):
+    atk = 0
+    df = 0
+    hp = 0
+    crit = 0.0
+    dodge = 0.0
+    speed = 0
+
+    if slot == ItemSlot.WEAPON:
+        atk = roll_range(WEAPON_ATK[rarity], from_gacha)
+    elif slot == ItemSlot.ARMOR:
+        df = roll_range(ARMOR_DEF[rarity], from_gacha)
+    elif slot == ItemSlot.SHIELD:
+        df = roll_range(SHIELD_DEF[rarity], from_gacha)
+        hp = roll_range(SHIELD_HP[rarity], from_gacha)
+    elif slot in (ItemSlot.HELMET, ItemSlot.PANTS, ItemSlot.BOOTS):
+        hp = roll_range(LIGHT_HP[rarity], from_gacha)
+        df = roll_range(LIGHT_DEF[rarity], from_gacha)
+        speed = roll_range(LIGHT_SPEED[rarity], from_gacha)
+    elif slot == ItemSlot.AMULET:
+        crit = float(roll_range(AMULET_CRIT[rarity], from_gacha))
+        dodge = float(roll_range(AMULET_DODGE[rarity], from_gacha))
+        speed = roll_range(AMULET_SPEED[rarity], from_gacha)
+
+    return {
+        "attack": atk,
+        "defense": df,
+        "hp": hp,
+        "crit_chance": crit,
+        "dodge_chance": dodge,
+        "speed": speed,
+    }
+
+
+def get_total_stats(user):
+    profile = get_or_create_profile(user)
+
+    base_hp = 100
+    base_atk = 10
+    base_def = 0
+    base_crit = 0.0
+    base_dodge = 0.0
+    base_speed = 0
+
+    total_hp = base_hp
+    total_atk = base_atk
+    total_def = base_def
+    total_crit = base_crit
+    total_dodge = base_dodge
+    total_speed = base_speed
+
+    mapping = [
+        ("equipped_weapon", ItemSlot.WEAPON),
+        ("equipped_helmet", ItemSlot.HELMET),
+        ("equipped_armor", ItemSlot.ARMOR),
+        ("equipped_pants", ItemSlot.PANTS),
+        ("equipped_boots", ItemSlot.BOOTS),
+        ("equipped_shield", ItemSlot.SHIELD),
+        ("equipped_amulet1", ItemSlot.AMULET),
+        ("equipped_amulet2", ItemSlot.AMULET),
+        ("equipped_amulet3", ItemSlot.AMULET),
+    ]
+
+    for field_name, _slot in mapping:
+        item = getattr(profile, field_name, None)
+        if item:
+            total_hp += item.hp
+            total_atk += item.attack
+            total_def += item.defense
+            total_crit += item.crit_chance
+            total_dodge += item.dodge_chance
+            total_speed += item.speed
+
+    return {
+        "hp": total_hp,
+        "attack": total_atk,
+        "defense": total_def,
+        "crit_chance": total_crit,
+        "dodge_chance": total_dodge,
+        "speed": total_speed,
+    }
+
+
+def enemy_stats_for_floor(floor):
+    base_hp = 40
+    base_atk = 8
+    base_def = 2
+
+    hp = int(base_hp * pow(1.18, floor))
+    atk = int(base_atk * pow(1.14, floor))
+    df = int(base_def * pow(1.12, floor))
+
+    return {
+        "hp": max(hp, 1),
+        "attack": max(atk, 1),
+        "defense": max(df, 0),
+    }
+
+
+def simulate_battle(user_stats, enemy_stats, max_turns=50):
+    log_lines = []
+
+    player_hp = user_stats["hp"]
+    player_atk = user_stats["attack"]
+    player_def = user_stats["defense"]
+    player_crit = user_stats["crit_chance"]
+    player_dodge = user_stats["dodge_chance"]
+    player_speed = user_stats["speed"]
+
+    enemy_hp = enemy_stats["hp"]
+    enemy_atk = enemy_stats["attack"]
+    enemy_def = enemy_stats["defense"]
+    enemy_speed = 0
+
+    for turn in range(1, max_turns + 1):
+        if player_hp <= 0 or enemy_hp <= 0:
+            break
+
+        log_lines.append(f"TURNO {turn}:")
+
+        if player_speed > enemy_speed:
+            first = "player"
+        elif enemy_speed > player_speed:
+            first = "enemy"
+        else:
+            first = random.choice(["player", "enemy"])
+
+        def do_attack(attacker_name):
+            nonlocal player_hp, enemy_hp
+            if attacker_name == "player":
+                dmg = max(1, player_atk - enemy_def)
+                crit = random.random() < (player_crit / 100.0)
+                if crit:
+                    dmg *= 2
+                enemy_hp -= dmg
+                if crit:
+                    log_lines.append(f"- El jugador hace {dmg} de daño CRÍTICO al enemigo.")
+                else:
+                    log_lines.append(f"- El jugador hace {dmg} de daño al enemigo.")
+            else:
+                if random.random() < (player_dodge / 100.0):
+                    log_lines.append("- El enemigo ataca pero el jugador ESQUIVA el golpe.")
+                    return
+                dmg = max(1, enemy_atk - player_def)
+                player_hp -= dmg
+                log_lines.append(f"- El enemigo hace {dmg} de daño al jugador.")
+
+        if first == "player":
+            do_attack("player")
+            if enemy_hp <= 0:
+                log_lines.append("El enemigo ha sido derrotado.")
+                break
+            do_attack("enemy")
+            if player_hp <= 0:
+                log_lines.append("El jugador ha sido derrotado.")
+                break
+        else:
+            do_attack("enemy")
+            if player_hp <= 0:
+                log_lines.append("El jugador ha sido derrotado.")
+                break
+            do_attack("player")
+            if enemy_hp <= 0:
+                log_lines.append("El enemigo ha sido derrotado.")
+                break
+
+    victory = player_hp > 0 and enemy_hp <= 0
+    return victory, log_lines
+
+
+@login_required
+def rpg_hub(request):
+    profile = get_or_create_profile(request.user)
+    stats = get_total_stats(request.user)
+    tower, _ = TowerProgress.objects.get_or_create(user=request.user)
+
+    context = {
+        "profile": profile,
+        "stats": stats,
+        "tower": tower,
+    }
+    return render(request, "notes/rpg_hub.html", context)
+
+
+@login_required
+def rpg_shop(request):
+    profile = get_or_create_profile(request.user)
+    created_item = None
+
+    if request.method == "POST":
+        slot_code = request.POST.get("slot")
+        try:
+            slot = ItemSlot(slot_code)
+        except ValueError:
+            messages.error(request, "Slot inválido.")
+            return redirect("rpg_shop")
+
+        COST = 5
+        if profile.coins < COST:
+            messages.error(request, "No tienes suficientes monedas.")
+            return redirect("rpg_shop")
+
+        rarity = ItemRarity.BASIC
+        stats = generate_item_stats(slot, rarity, from_gacha=False)
+        name = f"{SLOT_LABELS[slot]} básica"
+
+        item = CombatItem.objects.create(
+            owner=request.user,
+            name=name,
+            slot=slot,
+            rarity=rarity,
+            source=ItemSource.SHOP,
+            attack=stats["attack"],
+            defense=stats["defense"],
+            hp=stats["hp"],
+            crit_chance=stats["crit_chance"],
+            dodge_chance=stats["dodge_chance"],
+            speed=stats["speed"],
+        )
+
+        profile.coins -= COST
+        profile.save()
+
+        created_item = item
+        messages.success(
+            request,
+            f"Has comprado {item.name} (ATK {item.attack}, DEF {item.defense}, HP {item.hp}).",
+        )
+
+    items = CombatItem.objects.filter(owner=request.user).order_by("-created_at")
+
+    context = {
+        "profile": profile,
+        "items": items,
+        "created_item": created_item,
+    }
+    return render(request, "notes/rpg_shop.html", context)
+
+
+@login_required
+def rpg_gacha(request):
+    profile = get_or_create_profile(request.user)
+    rolled_item = None
+    rolled_rarity = None
+
+    if request.method == "POST":
+        slot_code = request.POST.get("slot")
+        try:
+            slot = ItemSlot(slot_code)
+        except ValueError:
+            messages.error(request, "Slot inválido.")
+            return redirect("rpg_gacha")
+
+        COST = 15
+        if profile.coins < COST:
+            messages.error(request, "No tienes suficientes monedas.")
+            return redirect("rpg_gacha")
+
+        rarity = roll_rarity()
+        stats = generate_item_stats(slot, rarity, from_gacha=True)
+        name = f"{SLOT_LABELS[slot]} {ItemRarity(rarity).label}"
+
+        item = CombatItem.objects.create(
+            owner=request.user,
+            name=name,
+            slot=slot,
+            rarity=rarity,
+            source=ItemSource.GACHA,
+            attack=stats["attack"],
+            defense=stats["defense"],
+            hp=stats["hp"],
+            crit_chance=stats["crit_chance"],
+            dodge_chance=stats["dodge_chance"],
+            speed=stats["speed"],
+        )
+
+        profile.coins -= COST
+        profile.save()
+
+        rolled_item = item
+        rolled_rarity = rarity
+
+        messages.success(
+            request,
+            f"¡Has obtenido {item.name}! ATK {item.attack}, DEF {item.defense}, HP {item.hp}."
+        )
+
+    probs = get_gacha_probs()
+    probabilities = [
+        {
+            "code": rarity,
+            "label": ItemRarity(rarity).label,
+            "percent": prob * 100.0,
+        }
+        for (rarity, prob) in probs
+    ]
+
+    context = {
+        "profile": profile,
+        "rolled_item": rolled_item,
+        "rolled_rarity": rolled_rarity,
+        "probabilities": probabilities,
+    }
+    return render(request, "notes/rpg_gacha.html", context)
+
+
+@login_required
+def rpg_tower(request):
+    profile = get_or_create_profile(request.user)
+    stats = get_total_stats(request.user)
+    tower, _ = TowerProgress.objects.get_or_create(user=request.user)
+
+    today = date.today()
+    if tower.daily_date != today:
+        tower.daily_date = today
+        tower.daily_coins = 0
+        tower.save()
+
+    last_battle = None
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "fight":
+            next_floor = tower.current_floor + 1
+            enemy = enemy_stats_for_floor(next_floor)
+            victory, log_lines = simulate_battle(stats, enemy)
+
+            log_text = "\n".join(log_lines)
+            battle = TowerBattleResult.objects.create(
+                user=request.user,
+                floor=next_floor,
+                victory=victory,
+                log_text=log_text,
+            )
+
+            last_battle = battle
+
+            if victory:
+                tower.current_floor = next_floor
+                if next_floor > tower.max_floor_reached:
+                    tower.max_floor_reached = next_floor
+
+                reward = next_floor
+                potencial = tower.daily_coins + reward
+                if potencial > 100:
+                    coins_awarded = max(0, 100 - tower.daily_coins)
+                else:
+                    coins_awarded = reward
+
+                if coins_awarded > 0:
+                    profile.coins += coins_awarded
+                    tower.daily_coins += coins_awarded
+                    profile.save()
+                    tower.save()
+                    messages.success(
+                        request,
+                        f"¡Victoria en el piso {next_floor}! Has ganado {coins_awarded} monedas (límite diario 100)."
+                    )
+                else:
+                    tower.save()
+                    messages.info(
+                        request,
+                        f"¡Victoria en el piso {next_floor}! Ya alcanzaste el máximo de 100 monedas diarias en la torre."
+                    )
+            else:
+                tower.save()
+                messages.error(
+                    request,
+                    f"Has sido derrotado en el piso {next_floor}..."
+                )
+
+        elif action == "reset":
+            tower.current_floor = 0
+            tower.save()
+            messages.info(request, "Has reiniciado tu progreso actual en la torre.")
+
+    if last_battle is None:
+        last_battle = TowerBattleResult.objects.filter(user=request.user).first()
+
+    top_players = (
+        TowerProgress.objects
+        .select_related("user")
+        .order_by("-max_floor_reached", "user__username")[:10]
+    )
+
+    context = {
+        "profile": profile,
+        "stats": stats,
+        "tower": tower,
+        "last_battle": last_battle,
+        "top_players": top_players,
+    }
+    return render(request, "notes/rpg_tower.html", context)
+
+
+@login_required
+def rpg_inventory(request):
+    profile = get_or_create_profile(request.user)
+    stats = get_total_stats(request.user)
+
+    # Filtro por tipo de slot
+    slot_filter = request.GET.get("slot", "all")
+    items_qs = CombatItem.objects.filter(owner=request.user).order_by("-created_at")
+    valid_slots = {s.value for s in ItemSlot}
+    if slot_filter in valid_slots:
+        items_qs = items_qs.filter(slot=slot_filter)
+    items = items_qs
+
+    equipped_ids = set()
+    for field in [
+        "equipped_weapon", "equipped_helmet", "equipped_armor",
+        "equipped_pants", "equipped_boots", "equipped_shield",
+        "equipped_amulet1", "equipped_amulet2", "equipped_amulet3",
+    ]:
+        it = getattr(profile, field, None)
+        if it:
+            equipped_ids.add(it.id)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "equip":
+            item_id = request.POST.get("item_id")
+            item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
+
+            if item.slot == ItemSlot.WEAPON:
+                profile.equipped_weapon = item
+                messages.success(request, f"Has equipado {item.name} como arma.")
+            elif item.slot == ItemSlot.HELMET:
+                profile.equipped_helmet = item
+                messages.success(request, f"Has equipado {item.name} como casco.")
+            elif item.slot == ItemSlot.ARMOR:
+                profile.equipped_armor = item
+                messages.success(request, f"Has equipado {item.name} como armadura.")
+            elif item.slot == ItemSlot.PANTS:
+                profile.equipped_pants = item
+                messages.success(request, f"Has equipado {item.name} como pantalones.")
+            elif item.slot == ItemSlot.BOOTS:
+                profile.equipped_boots = item
+                messages.success(request, f"Has equipado {item.name} como botas.")
+            elif item.slot == ItemSlot.SHIELD:
+                profile.equipped_shield = item
+                messages.success(request, f"Has equipado {item.name} como escudo.")
+            elif item.slot == ItemSlot.AMULET:
+                if profile.equipped_amulet1 is None:
+                    profile.equipped_amulet1 = item
+                    messages.success(request, f"Has equipado {item.name} en Amuleto 1.")
+                elif profile.equipped_amulet2 is None:
+                    profile.equipped_amulet2 = item
+                    messages.success(request, f"Has equipado {item.name} en Amuleto 2.")
+                elif profile.equipped_amulet3 is None:
+                    profile.equipped_amulet3 = item
+                    messages.success(request, f"Has equipado {item.name} en Amuleto 3.")
+                else:
+                    profile.equipped_amulet1 = item
+                    messages.success(request, f"Has reemplazado el Amuleto 1 con {item.name}.")
+            profile.save()
+            return redirect("rpg_inventory")
+
+    stats = get_total_stats(request.user)
+    equipped_ids = set()
+    for field in [
+        "equipped_weapon", "equipped_helmet", "equipped_armor",
+        "equipped_pants", "equipped_boots", "equipped_shield",
+        "equipped_amulet1", "equipped_amulet2", "equipped_amulet3",
+    ]:
+        it = getattr(profile, field, None)
+        if it:
+            equipped_ids.add(it.id)
+
+    context = {
+        "profile": profile,
+        "stats": stats,
+        "items": items,
+        "equipped_ids": equipped_ids,
+        "slot_filter": slot_filter,
+    }
+    return render(request, "notes/rpg_inventory.html", context)
+
+
+@login_required
+def rpg_gacha_config(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Solo el superusuario puede modificar el gacha.")
+
+    qs = GachaProbability.objects.all()
+    if not qs.exists():
+        for rarity, prob in DEFAULT_GACHA_PROBS:
+            GachaProbability.objects.create(rarity=rarity, probability=prob)
+        qs = GachaProbability.objects.all()
+
+    if request.method == "POST":
+        new_values = {}
+        total = 0.0
+        for rarity, _prob in DEFAULT_GACHA_PROBS:
+            field_name = f"prob_{rarity}"
+            val_str = request.POST.get(field_name, "").replace(",", ".")
+            try:
+                val_percent = float(val_str)
+            except ValueError:
+                messages.error(request, f"Valor inválido para {ItemRarity(rarity).label}.")
+                return redirect("rpg_gacha_config")
+            prob = val_percent / 100.0
+            if prob < 0:
+                messages.error(request, "Las probabilidades no pueden ser negativas.")
+                return redirect("rpg_gacha_config")
+            new_values[rarity] = prob
+            total += prob
+
+        if abs(total - 1.0) > 0.0001:
+            messages.error(
+                request,
+                "La suma de todas las probabilidades debe ser exactamente 100%. "
+                f"Actualmente es {total * 100:.4f}%."
+            )
+        else:
+            for rarity, prob in new_values.items():
+                obj, _ = GachaProbability.objects.get_or_create(rarity=rarity)
+                obj.probability = prob
+                obj.save()
+            messages.success(request, "Probabilidades actualizadas correctamente.")
+            return redirect("rpg_gacha_config")
+
+    probs = get_gacha_probs()
+    rows = []
+    for rarity, prob in probs:
+        rows.append({
+            "code": rarity,
+            "label": ItemRarity(rarity).label,
+            "percent": prob * 100.0,
+        })
+
+    context = {
+        "rows": rows,
+    }
+    return render(request, "notes/rpg_gacha_config.html", context)

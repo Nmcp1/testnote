@@ -9,6 +9,14 @@ urlpatterns = [
     path('notificaciones/', views.notifications, name='notifications'),
     path('moderacion/codigos/', views.invitation_admin, name='invitation_admin'),
     path('moderacion/moderadores/', views.moderator_panel, name='moderator_panel'),
+
     path('leaderboard/', views.leaderboard, name='leaderboard'),
-    path('minijuego/', views.mine_game, name='mine_game'),
+    path('minas/', views.mine_game, name='mine_game'),
+
+    path('rpg/', views.rpg_hub, name='rpg_hub'),
+    path('rpg/tienda/', views.rpg_shop, name='rpg_shop'),
+    path('rpg/gacha/', views.rpg_gacha, name='rpg_gacha'),
+    path('rpg/torre/', views.rpg_tower, name='rpg_tower'),
+    path('rpg/inventario/', views.rpg_inventory, name='rpg_inventory'),
+    path('rpg/gacha/config/', views.rpg_gacha_config, name='rpg_gacha_config'),
 ]

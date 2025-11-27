@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="fw-bold mb-0">Tienda básica 🛒</h2>
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary">Volver al hub RPG</a>
+</div>
+
+<p class="text-muted">Cada ítem básico cuesta <strong>5 monedas</strong> y da el valor mínimo de stats de su rareza básica.</p>
+
+<p>Monedas actuales: <span class="badge bg-warning text-dark">{{ profile.coins }}</span></p>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold mb-3">Comprar ítem básico</h5>
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">Slot</label>
+            <select name="slot" class="form-select">
+              <option value="weapon">Arma</option>
+              <option value="helmet">Casco</option>
+              <option value="armor">Armadura</option>
+              <option value="pants">Pantalones</option>
+              <option value="boots">Botas</option>
+              <option value="shield">Escudo</option>
+              <option value="amulet">Amuleto</option>
+            </select>
+          </div>
+          <button class="btn btn-success w-100">Comprar (5 monedas)</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-3">Últimos ítems obtenidos</h5>
+        {% if items %}
+          <div style="max-height: 260px; overflow-y: auto;">
+            <ul class="list-group list-group-flush">
+              {% for it in items %}
+              <li class="list-group-item">
+                <strong>{{ it.name }}</strong>
+                <span class="badge bg-secondary">{{ it.get_rarity_display }}</span>
+                <div class="small text-muted">
+                  ATK {{ it.attack }} | DEF {{ it.defense }} | HP {{ it.hp }}
+                  | CRIT {{ it.crit_chance|floatformat:1 }}% | ESQ {{ it.dodge_chance|floatformat:1 }}% | VEL {{ it.speed }}
+                </div>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% else %}
+          <p class="text-muted">Aún no tienes ítems.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

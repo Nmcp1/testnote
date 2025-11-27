@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2 class="fw-bold mb-3">RPG — Hub de Aventuras ⚔️</h2>
+
+<div class="row g-4 mb-3">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold">Tu estado</h5>
+        <p class="mb-1">Monedas: <strong>{{ profile.coins }}</strong></p>
+        <p class="mb-1">Piso actual: <strong>{{ tower.current_floor }}</strong></p>
+        <p class="mb-1">Piso máximo: <strong>{{ tower.max_floor_reached }}</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold">Stats totales</h5>
+        <ul class="mb-0">
+          <li>Vida: <strong>{{ stats.hp }}</strong></li>
+          <li>Ataque: <strong>{{ stats.attack }}</strong></li>
+          <li>Defensa: <strong>{{ stats.defense }}</strong></li>
+          <li>Crítico: <strong>{{ stats.crit_chance|floatformat:1 }}%</strong></li>
+          <li>Esquive: <strong>{{ stats.dodge_chance|floatformat:1 }}%</strong></li>
+          <li>Velocidad: <strong>{{ stats.speed }}</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold">Acciones</h5>
+        <a href="{% url 'rpg_tower' %}" class="btn btn-primary w-100 mb-2">Torre PVE 🏰</a>
+        <a href="{% url 'rpg_shop' %}" class="btn btn-success w-100 mb-2">Tienda básica 🛒</a>
+        <a href="{% url 'rpg_gacha' %}" class="btn btn-warning w-100 mb-2">Gacha 🎁</a>
+        <a href="{% url 'rpg_inventory' %}" class="btn btn-outline-dark w-100">Inventario y equipamiento 🎒</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

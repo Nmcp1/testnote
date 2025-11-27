@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="fw-bold mb-0">RPG — Gacha de equipo</h2>
+    <p class="text-muted mb-0">Gasta monedas para obtener objetos de distintas calidades.</p>
+  </div>
+  <div class="text-end">
+    <div class="fw-bold">Monedas: <span class="badge bg-warning text-dark">{{ profile.coins }}</span></div>
+    <small class="text-muted">Usuario: {{ request.user.username }}</small>
+  </div>
+</div>
+
+<div class="mb-3">
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill me-1">⬅ Volver al hub</a>
+  <a href="{% url 'rpg_shop' %}" class="btn btn-outline-primary btn-sm rounded-pill me-1">🛒 Tienda</a>
+  <a href="{% url 'rpg_inventory' %}" class="btn btn-outline-dark btn-sm rounded-pill me-1">🎒 Inventario</a>
+  <a href="{% url 'rpg_tower' %}" class="btn btn-outline-dark btn-sm rounded-pill">🗼 Torre</a>
+
+  {% if user.is_superuser %}
+    <a href="{% url 'rpg_gacha_config' %}" class="btn btn-sm btn-danger rounded-pill ms-2">
+      ⚙ Configurar probabilidades
+    </a>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-bold">Probabilidades actuales</div>
+      <div class="card-body">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Rareza</th>
+              <th class="text-end">Probabilidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in probabilities %}
+              <tr>
+                <td>{{ row.label }}</td>
+                <td class="text-end">{{ row.percent|floatformat:4 }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <small class="text-muted d-block mt-2">
+          La suma de todas las rarezas es 100%. Un admin puede modificarlas.
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-bold">Tirar gacha (15 monedas)</div>
+      <div class="card-body">
+        <p class="small text-muted">
+          Elige el tipo de objeto que quieres intentar conseguir. El resultado será de una rareza aleatoria según las probabilidades.
+        </p>
+
+        <form method="post" class="mt-2">
+          {% csrf_token %}
+          <div class="mb-2">
+            <label class="form-label fw-bold">Tipo de objeto</label>
+            <select name="slot" class="form-select">
+              <option value="weapon">Arma</option>
+              <option value="helmet">Casco</option>
+              <option value="armor">Armadura</option>
+              <option value="pants">Pantalones</option>
+              <option value="boots">Botas</option>
+              <option value="shield">Escudo</option>
+              <option value="amulet">Amuleto</option>
+            </select>
+          </div>
+          <button class="btn btn-success w-100 mt-2">🎲 Tirar gacha (15 monedas)</button>
+        </form>
+
+        {% if rolled_item %}
+          <hr>
+          <h5 class="fw-bold">Resultado obtenido</h5>
+          <p class="mb-1">
+            <span class="badge 
+              {% if rolled_item.rarity == 'basic' %}bg-secondary
+              {% elif rolled_item.rarity == 'uncommon' %}bg-success
+              {% elif rolled_item.rarity == 'special' %}bg-info
+              {% elif rolled_item.rarity == 'epic' %}bg-primary
+              {% elif rolled_item.rarity == 'legendary' %}bg-warning text-dark
+              {% elif rolled_item.rarity == 'mythic' %}bg-danger
+              {% elif rolled_item.rarity == 'ascended' %}bg-dark
+              {% endif %}
+            ">{{ rolled_item.get_rarity_display }}</span>
+            <strong>{{ rolled_item.name }}</strong> ({{ rolled_item.get_slot_display }})
+          </p>
+          <p class="mb-1 small">
+            ❤️ HP: {{ rolled_item.hp }} |
+            ⚔ ATK: {{ rolled_item.attack }} |
+            🛡 DEF: {{ rolled_item.defense }}
+          </p>
+          <p class="mb-0 small">
+            💥 Crit: {{ rolled_item.crit_chance|floatformat:1 }}% |
+            💨 Esquive: {{ rolled_item.dodge_chance|floatformat:1 }}% |
+            ⚡ Vel: {{ rolled_item.speed }}
+          </p>
+          <small class="text-muted">El objeto se ha añadido a tu inventario.</small>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

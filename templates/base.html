@@ -20,116 +20,121 @@
 <body class="bg-light">
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow mb-4">
-    <div class="container">
+  <div class="container">
 
-        <a class="navbar-brand fw-bold fs-4 text-warning" href="{% url 'home' %}">
-            📒 Muro de Notas
-        </a>
+    <a class="navbar-brand fw-bold fs-4 text-warning" href="{% url 'home' %}">
+      📒 Muro de Notas
+    </a>
 
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-                data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-        <div class="collapse navbar-collapse" id="navbarNav">
+    <div class="collapse navbar-collapse" id="navbarNav">
 
-            <ul class="navbar-nav me-auto">
+      <ul class="navbar-nav me-auto">
 
-                <li class="nav-item">
-                    <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
-                       href="{% url 'home' %}">
-                        Públicas
-                    </a>
-                </li>
+        <li class="nav-item">
+          <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
+             href="{% url 'home' %}">
+            Públicas
+          </a>
+        </li>
 
-                {% if user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
-                           href="{% url 'private_notes' %}">
-                            Privadas 🔒
-                        </a>
-                    </li>
-                {% else %}
-                    <li class="nav-item">
-                        <span class="btn btn-secondary mx-1 px-3 nav-pill-btn disabled"
-                              data-bs-toggle="tooltip"
-                              data-bs-title="Entra a una cuenta para ver tus notas privadas">
-                            Privadas 🔒
-                        </span>
-                    </li>
-                {% endif %}
+        {% if user.is_authenticated %}
+          <li class="nav-item">
+            <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
+               href="{% url 'private_notes' %}">
+              Privadas 🔒
+            </a>
+          </li>
 
-                <li class="nav-item">
-                    <a class="btn btn-outline-info mx-1 px-3 nav-pill-btn"
-                       href="{% url 'mine_game' %}">
-                        Minijuego 🎮
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="btn btn-outline-info mx-1 px-3 nav-pill-btn"
-                       href="{% url 'leaderboard' %}">
-                        Ranking 🏆
-                    </a>
-                </li>
-
-                {% if is_moderator %}
-                    <li class="nav-item">
-                        <a class="btn btn-outline-warning mx-1 px-3 nav-pill-btn"
-                           href="{% url 'invitation_admin' %}">
-                            Admin
-                        </a>
-                    </li>
-                {% endif %}
-
+          <!-- Juegos -->
+          <li class="nav-item dropdown">
+            <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn dropdown-toggle"
+               href="#" id="gamesDropdown" role="button" data-bs-toggle="dropdown">
+              Juegos 🎮
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="gamesDropdown">
+              <li><a class="dropdown-item" href="{% url 'mine_game' %}">Minas</a></li>
+              <li><a class="dropdown-item" href="{% url 'rpg_hub' %}">RPG / Torre</a></li>
             </ul>
+          </li>
 
-            <ul class="navbar-nav ms-auto">
-                {% if user.is_authenticated %}
+          <!-- Admin invitaciones -->
+          {% if is_moderator %}
+            <li class="nav-item">
+              <a class="btn btn-outline-warning mx-1 px-3 nav-pill-btn"
+                 href="{% url 'invitation_admin' %}">
+                Admin
+              </a>
+            </li>
+          {% endif %}
 
-                    <li class="nav-item mx-1">
-                        <a href="{% url 'notifications' %}"
-                           class="btn {% if unread_notifications_count > 0 %}btn-danger{% else %}btn-outline-light{% endif %} rounded-pill position-relative">
-                            Notificaciones
-                            {% if unread_notifications_count > 0 %}
-                              <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
-                                {{ unread_notifications_count }}
-                              </span>
-                            {% endif %}
-                        </a>
-                    </li>
+        {% else %}
+          <li class="nav-item">
+            <span class="btn btn-secondary mx-1 px-3 nav-pill-btn disabled"
+                  data-bs-toggle="tooltip"
+                  data-bs-title="Entra a una cuenta para ver tus notas privadas">
+              Privadas 🔒
+            </span>
+          </li>
+        {% endif %}
 
-                    <li class="nav-item d-flex align-items-center mx-2">
-                        <span class="text-white">
-                            👤 {{ user.username }}
-                        </span>
-                        <span class="badge bg-warning text-dark ms-2">
-                            🪙 {{ user_coins }}
-                        </span>
-                    </li>
+      </ul>
 
-                    <li class="nav-item">
-                        <form method="post" action="{% url 'logout' %}">
-                            {% csrf_token %}
-                            <button class="btn btn-danger rounded-pill">Salir</button>
-                        </form>
-                    </li>
+      <ul class="navbar-nav ms-auto">
+        {% if user.is_authenticated %}
 
-                {% else %}
-                    <li class="nav-item mx-1">
-                        <a class="btn btn-outline-light rounded-pill" href="{% url 'login' %}">Entrar</a>
-                    </li>
-                    <li class="nav-item mx-1">
-                        <a class="btn btn-light text-dark rounded-pill" href="{% url 'register' %}">
-                            Registrarse
-                        </a>
-                    </li>
-                {% endif %}
-            </ul>
+          <!-- Monedas -->
+          {% if user.profile %}
+            <li class="nav-item d-flex align-items-center mx-2">
+              <span class="badge bg-warning text-dark px-3 py-2">
+                💰 {{ user.profile.coins }} monedas
+              </span>
+            </li>
+          {% endif %}
 
-        </div>
+          <li class="nav-item mx-1">
+            <a href="{% url 'notifications' %}"
+               class="btn {% if unread_notifications_count > 0 %}btn-danger{% else %}btn-outline-light{% endif %} rounded-pill position-relative">
+              Notificaciones
+              {% if unread_notifications_count > 0 %}
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
+                  {{ unread_notifications_count }}
+                </span>
+              {% endif %}
+            </a>
+          </li>
+
+          <li class="nav-item d-flex align-items-center mx-2">
+            <span class="text-white">👤 {{ user.username }}</span>
+          </li>
+
+          <li class="nav-item">
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button class="btn btn-danger rounded-pill">Salir</button>
+            </form>
+          </li>
+
+        {% else %}
+          <li class="nav-item mx-1">
+            <a class="btn btn-outline-light rounded-pill" href="{% url 'login' %}">Entrar</a>
+          </li>
+          <li class="nav-item mx-1">
+            <a class="btn btn-light text-dark rounded-pill" href="{% url 'register' %}">
+              Registrarse
+            </a>
+          </li>
+        {% endif %}
+      </ul>
+
     </div>
+  </div>
 </nav>
+
 
 <div class="container">
 
