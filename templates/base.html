@@ -8,8 +8,8 @@
     <style>
         .nav-pill-btn {
             border-radius: 50px !important;
-            font-weight: 700 !important;  /* Letras más gruesas */
-            color: white !important;      /* Texto blanco */
+            font-weight: 700 !important;
+            color: white !important;
         }
         .nav-pill-btn:hover {
             opacity: 0.85;
@@ -35,7 +35,6 @@
 
             <ul class="navbar-nav me-auto">
 
-                <!-- BOTÓN: NOTAS PÚBLICAS -->
                 <li class="nav-item">
                     <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
                        href="{% url 'home' %}">
@@ -43,7 +42,6 @@
                     </a>
                 </li>
 
-                <!-- BOTÓN: NOTAS PRIVADAS -->
                 {% if user.is_authenticated %}
                     <li class="nav-item">
                         <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
@@ -61,7 +59,20 @@
                     </li>
                 {% endif %}
 
-                <!-- BOTÓN: ADMIN (solo moderadores) -->
+                <li class="nav-item">
+                    <a class="btn btn-outline-info mx-1 px-3 nav-pill-btn"
+                       href="{% url 'mine_game' %}">
+                        Minijuego 🎮
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="btn btn-outline-info mx-1 px-3 nav-pill-btn"
+                       href="{% url 'leaderboard' %}">
+                        Ranking 🏆
+                    </a>
+                </li>
+
                 {% if is_moderator %}
                     <li class="nav-item">
                         <a class="btn btn-outline-warning mx-1 px-3 nav-pill-btn"
@@ -76,7 +87,6 @@
             <ul class="navbar-nav ms-auto">
                 {% if user.is_authenticated %}
 
-                    <!-- BOTÓN NOTIFICACIONES -->
                     <li class="nav-item mx-1">
                         <a href="{% url 'notifications' %}"
                            class="btn {% if unread_notifications_count > 0 %}btn-danger{% else %}btn-outline-light{% endif %} rounded-pill position-relative">
@@ -90,7 +100,12 @@
                     </li>
 
                     <li class="nav-item d-flex align-items-center mx-2">
-                        <span class="text-white">👤 {{ user.username }}</span>
+                        <span class="text-white">
+                            👤 {{ user.username }}
+                        </span>
+                        <span class="badge bg-warning text-dark ms-2">
+                            🪙 {{ user_coins }}
+                        </span>
                     </li>
 
                     <li class="nav-item">
@@ -118,7 +133,6 @@
 
 <div class="container">
 
-    {# mensajes flash (éxito / error) #}
     {% if messages %}
       <div class="mb-3">
         {% for message in messages %}
@@ -130,15 +144,12 @@
       </div>
     {% endif %}
 
-    {% block content %}
-    {% endblock %}
+    {% block content %}{% endblock %}
 </div>
-
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // Activar tooltips de Bootstrap
     document.addEventListener('DOMContentLoaded', () => {
         const tList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         [...tList].map(el => new bootstrap.Tooltip(el));

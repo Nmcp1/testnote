@@ -1,17 +1,26 @@
+import random
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.db.models import Q, Count   # 👈 IMPORTANTE: Q
+from django.db.models import Q, Count
 from django.urls import reverse
 from django.http import HttpResponseForbidden
 from django.contrib import messages
 
 from django.contrib.auth.models import Group, User
 
-from .models import Note, NoteLike, Notification, InvitationCode
+from .models import (
+    Note,
+    NoteLike,
+    Notification,
+    InvitationCode,
+    UserProfile,
+    MineGameResult,
+)
 from .forms import (
     NoteForm,
     PrivateNoteForm,
@@ -20,30 +29,25 @@ from .forms import (
 )
 
 MODERATOR_GROUP_NAME = "moderador"
+MINE_GAME_SESSION_KEY = "mine_game_state"
 
 
 def ensure_moderator_group_exists():
-    """Crea el grupo 'moderador' si no existe."""
     Group.objects.get_or_create(name=MODERATOR_GROUP_NAME)
 
 
 def user_is_moderator(user):
-    """Devuelve True si el usuario es moderador (o superusuario)."""
     if not user.is_authenticated:
         return False
-
     if user.is_superuser:
         return True
-
     ensure_moderator_group_exists()
     return user.groups.filter(name__iexact=MODERATOR_GROUP_NAME).exists()
 
 
 def home(request):
-    # Filtro de orden: por fecha o por likes
     orden = request.GET.get("orden", "fecha")
 
-    # SOLO notas públicas (recipient NULL)
     notes_qs = (
         Note.objects.filter(recipient__isnull=True)
         .select_related("author")
@@ -55,7 +59,7 @@ def home(request):
 
     if orden == "likes":
         notes_qs = notes_qs.order_by("-likes_count", "-created_at")
-    else:  # 'fecha'
+    else:
         notes_qs = notes_qs.order_by("-created_at")
 
     paginator = Paginator(notes_qs, 9)
@@ -78,7 +82,7 @@ def home(request):
             if form.is_valid():
                 note = form.save(commit=False)
                 note.author = request.user
-                note.recipient = None  # pública
+                note.recipient = None
                 note.save()
                 return redirect(f"{request.path}?orden={orden}")
         else:
@@ -94,7 +98,6 @@ def home(request):
 
 
 def note_detail(request, note_id):
-    # Detalle solo para notas públicas
     note_qs = (
         Note.objects.filter(pk=note_id, recipient__isnull=True)
         .select_related("author")
@@ -123,7 +126,6 @@ def note_detail(request, note_id):
             reply.author = request.user
             reply.save()
 
-            # Notificar al autor de la nota (si no es la misma persona)
             if note.author != request.user:
                 Notification.objects.create(
                     user=note.author,
@@ -155,7 +157,7 @@ def private_notes(request):
             author=request.user,
             recipient__isnull=False,
         )
-    else:  # "todas"
+    else:
         notes_qs = Note.objects.filter(
             Q(recipient=request.user) |
             Q(author=request.user, recipient__isnull=False)
@@ -174,7 +176,6 @@ def private_notes(request):
             note.author = request.user
             note.save()
 
-            # Notificación para el destinatario
             if note.recipient and note.recipient != request.user:
                 Notification.objects.create(
                     user=note.recipient,
@@ -220,7 +221,6 @@ def register(request):
 @require_POST
 @login_required
 def toggle_like(request, note_id):
-    # Solo se pueden likear notas públicas
     note = get_object_or_404(Note, pk=note_id, recipient__isnull=True)
 
     like, created = NoteLike.objects.get_or_create(
@@ -229,7 +229,6 @@ def toggle_like(request, note_id):
     )
 
     if created:
-        # Like nuevo -> notificar al autor (si no soy yo)
         if note.author != request.user:
             Notification.objects.create(
                 user=note.author,
@@ -237,7 +236,6 @@ def toggle_like(request, note_id):
                 url=reverse("note_detail", args=[note.id]),
             )
     else:
-        # Ya tenía like -> quitar
         like.delete()
 
     next_url = request.META.get("HTTP_REFERER") or "/"
@@ -257,7 +255,6 @@ def notifications(request):
 
 @login_required
 def invitation_admin(request):
-    """Vista de administración de códigos de invitación (solo moderadores)."""
     if not user_is_moderator(request.user):
         return HttpResponseForbidden("No tienes permiso para ver esta página.")
 
@@ -301,7 +298,6 @@ def invitation_admin(request):
 
 @login_required
 def moderator_panel(request):
-    """Panel para asignar y quitar el rol de moderador (solo superusuario)."""
     if not request.user.is_superuser:
         return HttpResponseForbidden("Solo el superusuario puede gestionar moderadores.")
 
@@ -349,3 +345,149 @@ def moderator_panel(request):
         "non_moderators": non_moderators,
     }
     return render(request, "notes/moderator_panel.html", context)
+
+
+def leaderboard(request):
+    """
+    Ranking de usuarios por cantidad de monedas (perfil).
+    """
+    profiles = (
+        UserProfile.objects
+        .select_related("user")
+        .order_by("-coins", "user__username")[:50]
+    )
+
+    current_user_profile = None
+    if request.user.is_authenticated:
+        current_user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+    context = {
+        "profiles": profiles,
+        "current_user_profile": current_user_profile,
+    }
+    return render(request, "notes/leaderboard.html", context)
+
+
+def _new_mine_game_state():
+    rows = 10
+    cols = 10
+    mines_count = 15
+
+    all_cells = [f"{r}-{c}" for r in range(rows) for c in range(cols)]
+    mines = random.sample(all_cells, mines_count)
+
+    return {
+        "rows": rows,
+        "cols": cols,
+        "mines": mines,
+        "revealed": [],
+        "score": 0,
+        "status": "playing",  # playing / lost
+        "hit_cell": None,
+    }
+
+
+@login_required
+def mine_game(request):
+    """
+    Minijuego de 10x10 con 15 minas.
+    - Casillas seguras: verde claro (+1 punto).
+    - Mina: roja, termina el juego y deja el puntaje en 0.
+    - Botón "Retirarse": guarda partida y otorga 1 moneda por cada 10 puntos.
+    - A la derecha: top 10 mayores puntuaciones y últimas 10 partidas.
+    """
+    state = request.session.get(MINE_GAME_SESSION_KEY)
+    if not state:
+        state = _new_mine_game_state()
+        request.session[MINE_GAME_SESSION_KEY] = state
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "click" and state["status"] == "playing":
+            cell = request.POST.get("cell")
+            if cell and cell not in state["revealed"]:
+                if cell in state["mines"]:
+                    state["status"] = "lost"
+                    state["hit_cell"] = cell
+                    state["score"] = 0
+
+                    MineGameResult.objects.create(
+                        user=request.user,
+                        score=0,
+                        result=MineGameResult.RESULT_BOMB,
+                    )
+                    messages.error(
+                        request,
+                        "💥 Pisaste una bomba. Perdiste todos tus puntos."
+                    )
+                else:
+                    state["revealed"].append(cell)
+                    state["score"] += 1
+
+            request.session[MINE_GAME_SESSION_KEY] = state
+
+        elif action == "retire" and state["status"] == "playing":
+            score = int(state.get("score", 0))
+
+            MineGameResult.objects.create(
+                user=request.user,
+                score=score,
+                result=MineGameResult.RESULT_RETIRE,
+            )
+
+            bonus = score // 10
+            if bonus > 0:
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                profile.coins += bonus
+                profile.save()
+                messages.success(
+                    request,
+                    f"Te retiraste con {score} puntos. Has ganado {bonus} moneda(s).",
+                )
+            else:
+                messages.info(
+                    request,
+                    f"Te retiraste con {score} puntos. No se otorgan monedas.",
+                )
+
+            state = _new_mine_game_state()
+            request.session[MINE_GAME_SESSION_KEY] = state
+
+        elif action == "new_game":
+            state = _new_mine_game_state()
+            request.session[MINE_GAME_SESSION_KEY] = state
+
+    rows = state["rows"]
+    cols = state["cols"]
+
+    # Lista plana de celdas para CSS Grid (10x10)
+    cells = [f"{r}-{c}" for r in range(rows) for c in range(cols)]
+
+    revealed_cells = state["revealed"]
+    hit_cell = state["hit_cell"]
+    game_status = state["status"]
+    current_score = state["score"]
+
+    top_scores = (
+        MineGameResult.objects
+        .select_related("user")
+        .order_by("-score", "-finished_at")[:10]
+    )
+
+    last_games = (
+        MineGameResult.objects
+        .select_related("user")
+        .order_by("-finished_at")[:10]
+    )
+
+    context = {
+        "cells": cells,
+        "revealed_cells": revealed_cells,
+        "hit_cell": hit_cell,
+        "game_status": game_status,
+        "current_score": current_score,
+        "top_scores": top_scores,
+        "last_games": last_games,
+    }
+    return render(request, "notes/mine_game.html", context)

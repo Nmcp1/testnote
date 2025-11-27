@@ -9,4 +9,6 @@ urlpatterns = [
     path('notificaciones/', views.notifications, name='notifications'),
     path('moderacion/codigos/', views.invitation_admin, name='invitation_admin'),
     path('moderacion/moderadores/', views.moderator_panel, name='moderator_panel'),
+    path('leaderboard/', views.leaderboard, name='leaderboard'),
+    path('minijuego/', views.mine_game, name='mine_game'),
 ]

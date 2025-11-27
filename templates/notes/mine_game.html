@@ -1,0 +1,233 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+  .game-wrapper {
+    background-color: #f5f5f5;
+    border-radius: 18px;
+    padding: 1.5rem 2rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+
+  /* Contenedor que centra tablero y botones */
+  .game-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;   /* 👈 centra todo horizontalmente */
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* TABLERO 10x10 */
+  .mine-board {
+    display: inline-grid;                    /* shrink-to-fit */
+    grid-template-columns: repeat(10, 35px);
+    grid-auto-rows: 35px;
+    border: 3px solid #000;
+    gap: 0;
+    background: #fff;
+    margin-bottom: 20px;
+  }
+
+  .mine-cell-btn {
+    width: 100%;
+    height: 100%;
+    border: 1px solid #000;
+    margin: 0;
+    padding: 0;
+    display: block;
+  }
+
+  .cell-hidden { background: #ffffff; }
+  .cell-safe   { background: #b8f5b8; }
+  .cell-bomb   { background: #ff6b6b; }
+
+  .mine-cell-btn:disabled {
+    cursor: default;
+  }
+
+  @media (max-width: 900px) {
+    .mine-board {
+      grid-template-columns: repeat(10, 28px);
+      grid-auto-rows: 28px;
+    }
+  }
+</style>
+
+<div class="game-wrapper">
+
+  <div class="row align-items-start">
+
+    <!-- IZQUIERDA: JUEGO -->
+    <div class="col-lg-7 mb-4">
+
+      <h2 class="fw-bold">Minijuego de minas 🎮</h2>
+
+      <p class="text-muted">
+        Haz clic en las casillas blancas. Cada casilla segura vale <strong>1 punto</strong>.<br>
+        Si tocas una bomba (rojo) pierdes todos los puntos.<br>
+        Si te <strong>retiras</strong>, guardas tu puntaje y ganas <strong>1 moneda por cada 10 puntos</strong>.
+      </p>
+
+      <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
+        <span class="badge bg-primary fs-6 p-2 px-3">Puntos actuales: {{ current_score }}</span>
+
+        {% if game_status == "playing" %}
+          <span class="badge bg-success px-3">Estado: Jugando</span>
+        {% else %}
+          <span class="badge bg-danger px-3">Estado: Derrota</span>
+        {% endif %}
+      </div>
+
+
+      <!-- ZONA CENTRADA -->
+      <div class="game-center">
+
+        <!-- TABLERO -->
+        <form method="post" class="mb-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="click">
+
+          <div class="mine-board">
+            {% for cell_id in cells %}
+
+              {% if cell_id in revealed_cells %}
+                <button
+                  type="submit"
+                  name="cell"
+                  value="{{ cell_id }}"
+                  class="mine-cell-btn cell-safe"
+                  {% if game_status != "playing" %}disabled{% endif %}
+                ></button>
+
+              {% elif hit_cell == cell_id %}
+                <button
+                  type="submit"
+                  name="cell"
+                  value="{{ cell_id }}"
+                  class="mine-cell-btn cell-bomb"
+                  disabled
+                ></button>
+
+              {% else %}
+                <button
+                  type="submit"
+                  name="cell"
+                  value="{{ cell_id }}"
+                  class="mine-cell-btn cell-hidden"
+                  {% if game_status != "playing" %}disabled{% endif %}
+                ></button>
+
+              {% endif %}
+
+            {% endfor %}
+          </div>
+        </form>
+
+        <!-- BOTONES -->
+        <div class="d-flex flex-wrap justify-content-center gap-3">
+
+          <!-- RETIRARSE -->
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="retire">
+            <button
+              type="submit"
+              class="btn btn-lg btn-warning fw-semibold px-4"
+              {% if game_status != "playing" %}disabled{% endif %}
+            >
+              RETIRARSE
+            </button>
+          </form>
+
+          <!-- NUEVA PARTIDA -->
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="new_game">
+            <button type="submit" class="btn btn-lg btn-secondary fw-semibold px-4">
+              Nueva partida
+            </button>
+          </form>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- DERECHA: TOP + HISTORIAL -->
+    <div class="col-lg-5">
+
+      <!-- TOP -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h4 class="fw-bold text-center mb-3">Top 10 mayores puntuaciones 🏆</h4>
+
+          {% if top_scores %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>#</th>
+                    <th>Usuario</th>
+                    <th>Puntos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for g in top_scores %}
+                    <tr>
+                      <td>{{ forloop.counter }}</td>
+                      <td>@{{ g.user.username }}</td>
+                      <td>{{ g.score }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted text-center mb-0">No hay registros aún.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- HISTORIAL -->
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h4 class="fw-bold text-center mb-3">Últimas 10 partidas ⏱️</h4>
+
+          {% if last_games %}
+            <div style="max-height: 260px; overflow-y: auto;">
+              <ul class="list-group list-group-flush">
+                {% for g in last_games %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>@{{ g.user.username }}</strong><br>
+                      <span class="small text-muted">
+                        {% if g.result == "retire" %}
+                          Se retiró con {{ g.score }} pts
+                        {% else %}
+                          Perdió por bomba ({{ g.score }} pts)
+                        {% endif %}
+                      </span>
+                    </div>
+                    <span class="badge {% if g.result == 'retire' %}bg-success{% else %}bg-danger{% endif %}">
+                      {{ g.finished_at|date:"d/m H:i" }}
+                    </span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% else %}
+            <p class="text-muted text-center mb-0">Sin partidas registradas.</p>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}
