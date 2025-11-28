@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="fw-bold mb-3">RPG — Intercambios 🔁</h2>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
+    ← Volver al hub RPG
+  </a>
+  <a href="{% url 'rpg_trade_create' %}" class="btn btn-primary btn-sm rounded-pill">
+    Nuevo intercambio
+  </a>
+</div>
+
+<div class="row g-3">
+  <!-- Intercambios recibidos -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-3">Intercambios recibidos</h5>
+
+        {% if incoming %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>De</th>
+                  <th>Estado</th>
+                  <th>Monedas</th>
+                  <th>Fecha</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for t in incoming %}
+                <tr>
+                  <td>{{ t.from_user.username }}</td>
+                  <td>
+                    {% if t.status == "pending" %}
+                      <span class="badge bg-warning text-dark">Pendiente</span>
+                    {% elif t.status == "accepted" %}
+                      <span class="badge bg-success">Aceptado</span>
+                    {% elif t.status == "rejected" %}
+                      <span class="badge bg-danger">Rechazado</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Cancelado</span>
+                    {% endif %}
+                  </td>
+                  <td style="font-size: 0.8rem;">
+                    Él da: {{ t.from_coins }}<br>
+                    Tú das: {{ t.to_coins }}
+                  </td>
+                  <td style="font-size: 0.8rem;">
+                    {{ t.created_at|date:"d/m/Y H:i" }}
+                  </td>
+                  <td class="text-end">
+                    <a href="{% url 'rpg_trade_detail' t.id %}"
+                       class="btn btn-sm btn-outline-primary">
+                      Ver
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">No tienes intercambios recibidos.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Intercambios enviados -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-3">Intercambios enviados</h5>
+
+        {% if outgoing %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Para</th>
+                  <th>Estado</th>
+                  <th>Monedas</th>
+                  <th>Fecha</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for t in outgoing %}
+                <tr>
+                  <td>{{ t.to_user.username }}</td>
+                  <td>
+                    {% if t.status == "pending" %}
+                      <span class="badge bg-warning text-dark">Pendiente</span>
+                    {% elif t.status == "accepted" %}
+                      <span class="badge bg-success">Aceptado</span>
+                    {% elif t.status == "rejected" %}
+                      <span class="badge bg-danger">Rechazado</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Cancelado</span>
+                    {% endif %}
+                  </td>
+                  <td style="font-size: 0.8rem;">
+                    Tú das: {{ t.from_coins }}<br>
+                    Él da: {{ t.to_coins }}
+                  </td>
+                  <td style="font-size: 0.8rem;">
+                    {{ t.created_at|date:"d/m/Y H:i" }}
+                  </td>
+                  <td class="text-end">
+                    <a href="{% url 'rpg_trade_detail' t.id %}"
+                       class="btn btn-sm btn-outline-primary">
+                      Ver
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">No has enviado intercambios.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

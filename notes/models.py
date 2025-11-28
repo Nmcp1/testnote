@@ -342,3 +342,78 @@ class PvpBattleLog(models.Model):
         result = "ganó" if self.attacker_won else "perdió"
         return f"{self.attacker.username} {result} contra {self.defender.username} (PvP)"
 
+class Trade(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_ACCEPTED = "accepted"
+    STATUS_REJECTED = "rejected"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pendiente"),
+        (STATUS_ACCEPTED, "Aceptado"),
+        (STATUS_REJECTED, "Rechazado"),
+        (STATUS_CANCELLED, "Cancelado"),
+    ]
+
+    from_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="trades_sent",
+    )
+    to_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="trades_received",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+
+    # Monedas que pone cada lado
+    from_coins = models.PositiveIntegerField(
+        default=0,
+        help_text="Monedas que entrega el emisor.",
+    )
+    to_coins = models.PositiveIntegerField(
+        default=0,
+        help_text="Monedas que entrega el receptor.",
+    )
+
+    # Objetos que pone cada lado (máx 10 en total, se valida en la vista)
+    offered_from = models.ManyToManyField(
+        CombatItem,
+        blank=True,
+        related_name="trades_offered_from",
+    )
+    offered_to = models.ManyToManyField(
+        CombatItem,
+        blank=True,
+        related_name="trades_offered_to",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    last_actor = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trades_last_actor",
+    )
+
+    def total_items(self):
+        return self.offered_from.count() + self.offered_to.count()
+
+    def is_pending(self):
+        return self.status == self.STATUS_PENDING
+
+    def other_user(self, user):
+        return self.to_user if user == self.from_user else self.from_user
+
+    def __str__(self):
+        return f"Trade #{self.pk} {self.from_user} ↔ {self.to_user} ({self.status})"
+

@@ -22,4 +22,7 @@ urlpatterns = [
     path("rpg/pvp/", views.rpg_pvp_arena, name="rpg_pvp_arena"),
     path("rpg/pvp/challenge/<int:target_id>/", views.rpg_pvp_challenge, name="rpg_pvp_challenge"),
     path("rpg/pvp/leaderboard/", views.rpg_pvp_leaderboard, name="rpg_pvp_leaderboard"),
+    path("rpg/trades/", views.rpg_trades, name="rpg_trades"),
+    path("rpg/trades/new/", views.rpg_trade_create, name="rpg_trade_create"),
+    path("rpg/trades/<int:trade_id>/", views.rpg_trade_detail, name="rpg_trade_detail"),
 ]
