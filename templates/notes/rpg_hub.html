@@ -1,44 +1,71 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block content %}
 
-<h2 class="fw-bold mb-3">RPG — Hub de Aventuras ⚔️</h2>
+<h2 class="fw-bold mb-3">RPG — Hub principal</h2>
 
-<div class="row g-4 mb-3">
-  <div class="col-md-4">
+<div class="row g-3">
+  <div class="col-lg-4">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h5 class="fw-bold">Tu estado</h5>
+        <h5 class="fw-bold mb-2">Tu personaje</h5>
+        <p class="mb-1">Usuario: <strong>{{ request.user.username }}</strong></p>
         <p class="mb-1">Monedas: <strong>{{ profile.coins }}</strong></p>
-        <p class="mb-1">Piso actual: <strong>{{ tower.current_floor }}</strong></p>
-        <p class="mb-1">Piso máximo: <strong>{{ tower.max_floor_reached }}</strong></p>
+        <hr>
+        <p class="mb-1">Vida total: <strong>{{ stats.hp }}</strong></p>
+        <p class="mb-1">Ataque: <strong>{{ stats.attack }}</strong></p>
+        <p class="mb-1">Defensa: <strong>{{ stats.defense }}</strong></p>
+        <p class="mb-1">Crítico: <strong>{{ stats.crit_chance }}%</strong></p>
+        <p class="mb-1">Esquive: <strong>{{ stats.dodge_chance }}%</strong></p>
+        <p class="mb-0">Velocidad: <strong>{{ stats.speed }}</strong></p>
       </div>
     </div>
   </div>
 
-  <div class="col-md-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h5 class="fw-bold">Stats totales</h5>
-        <ul class="mb-0">
-          <li>Vida: <strong>{{ stats.hp }}</strong></li>
-          <li>Ataque: <strong>{{ stats.attack }}</strong></li>
-          <li>Defensa: <strong>{{ stats.defense }}</strong></li>
-          <li>Crítico: <strong>{{ stats.crit_chance|floatformat:1 }}%</strong></li>
-          <li>Esquive: <strong>{{ stats.dodge_chance|floatformat:1 }}%</strong></li>
-          <li>Velocidad: <strong>{{ stats.speed }}</strong></li>
-        </ul>
-      </div>
-    </div>
-  </div>
+  <div class="col-lg-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column justify-content-between">
+        <div>
+          <h5 class="fw-bold mb-2">Modo PvE — Torre</h5>
+          <p class="mb-1">
+            Piso actual: <strong>{{ tower.current_floor }}</strong>
+          </p>
+          <p class="mb-3">
+            Máximo piso alcanzado: <strong>{{ tower.max_floor_reached }}</strong>
+          </p>
+        </div>
 
-  <div class="col-md-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h5 class="fw-bold">Acciones</h5>
-        <a href="{% url 'rpg_tower' %}" class="btn btn-primary w-100 mb-2">Torre PVE 🏰</a>
-        <a href="{% url 'rpg_shop' %}" class="btn btn-success w-100 mb-2">Tienda básica 🛒</a>
-        <a href="{% url 'rpg_gacha' %}" class="btn btn-warning w-100 mb-2">Gacha 🎁</a>
-        <a href="{% url 'rpg_inventory' %}" class="btn btn-outline-dark w-100">Inventario y equipamiento 🎒</a>
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          <a href="{% url 'rpg_tower' %}" class="btn btn-primary rounded-pill">
+            🗼 Entrar a la torre
+          </a>
+          <a href="{% url 'rpg_inventory' %}" class="btn btn-outline-secondary rounded-pill">
+            🎒 Inventario
+          </a>
+          <a href="{% url 'rpg_shop' %}" class="btn btn-outline-secondary rounded-pill">
+            🛒 Tienda
+          </a>
+          <a href="{% url 'rpg_gacha' %}" class="btn btn-outline-secondary rounded-pill">
+            ⭐ Gacha
+          </a>
+        </div>
+
+        <hr class="my-3">
+
+        <div>
+          <h5 class="fw-bold mb-2">Modo PvP — Arena</h5>
+          <p class="text-muted mb-2" style="font-size: 0.9rem;">
+            Desafía a jugadores con mejor clasificación, roba su puesto y reclama recompensas diarias.
+          </p>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'rpg_pvp_arena' %}" class="btn btn-danger rounded-pill">
+              ⚔️ Arena PvP
+            </a>
+            <a href="{% url 'rpg_pvp_leaderboard' %}" class="btn btn-outline-danger rounded-pill">
+              🏆 Ranking PvP
+            </a>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>

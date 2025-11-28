@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  /* Colores por rareza */
+  .rarity-basic { color: #9e9e9e; }
+  .rarity-uncommon { color: #4caf50; }
+  .rarity-special { color: #2196f3; }
+  .rarity-epic { color: #9c27b0; }
+  .rarity-legendary { color: #ffeb3b; font-weight: bold; }
+  .rarity-mythic { color: #f44336; font-weight: bold; }
+  .rarity-ascended { color: #e91e63; font-weight: bold; }
+</style>
+
+<h2 class="fw-bold mb-3">RPG — Arena PvP ⚔️</h2>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
+    ← Volver al hub
+  </a>
+  <a href="{% url 'rpg_pvp_leaderboard' %}" class="btn btn-outline-danger btn-sm rounded-pill">
+    🏆 Ver ranking PvP
+  </a>
+</div>
+
+<div class="row g-3">
+  <!-- Columna izquierda -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Tu clasificación</h5>
+
+        <p class="mb-1">Usuario: <strong>{{ request.user.username }}</strong></p>
+        <p class="mb-1">Puesto actual: <strong>#{{ my_rank.position }}</strong></p>
+        <p class="mb-3">Monedas actuales: <strong>{{ profile.coins }}</strong></p>
+
+        <h6 class="fw-bold mb-1">Tus estadísticas</h6>
+        <p class="mb-1" style="font-size: 0.85rem;">Vida: <strong>{{ stats.hp }}</strong></p>
+        <p class="mb-1" style="font-size: 0.85rem;">Ataque: <strong>{{ stats.attack }}</strong></p>
+        <p class="mb-1" style="font-size: 0.85rem;">Defensa: <strong>{{ stats.defense }}</strong></p>
+        <p class="mb-1" style="font-size: 0.85rem;">Crítico: <strong>{{ stats.crit_chance }}%</strong></p>
+        <p class="mb-1" style="font-size: 0.85rem;">Esquive: <strong>{{ stats.dodge_chance }}%</strong></p>
+        <p class="mb-3" style="font-size: 0.85rem;">Velocidad: <strong>{{ stats.speed }}</strong></p>
+
+        <hr class="my-2">
+
+        <h6 class="fw-bold mb-1">Recompensa diaria</h6>
+        <p class="mb-1">
+          Recompensa por tu puesto: <strong>{{ todays_reward }}</strong> monedas
+        </p>
+
+        <form method="post" class="mt-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="claim_reward">
+          <button type="submit"
+                  class="btn btn-sm rounded-pill {% if can_claim %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                  {% if not can_claim %}disabled{% endif %}>
+            💰 Cobrar recompensa diaria
+          </button>
+        </form>
+
+        {% if not can_claim and todays_reward > 0 %}
+          <small class="text-muted d-block mt-2" style="font-size: 0.8rem;">
+            Ya has cobrado tu recompensa hoy.
+          </small>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Columna central — rivales -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Rivales disponibles</h5>
+        <p class="text-muted" style="font-size: 0.9rem;">
+          Solo puedes desafiar hasta <strong>3 puestos por encima</strong>.
+        </p>
+
+        <table class="table table-sm align-middle mb-0" style="font-size: 0.9rem;">
+          <thead>
+            <tr>
+              <th>Puesto</th>
+              <th>Usuario</th>
+              <th>Equipamiento</th>
+              <th></th>
+            </tr>
+          </thead>
+
+          <tbody>
+          {% for row in challengers %}
+            {% with u=row.user p=row.profile s=row.stats %}
+            <tr>
+              <td>#{{ row.rank.position }}</td>
+              <td>@{{ u.username }}</td>
+
+              <td>
+                {% if row.has_equipment %}
+
+                  {% if p.equipped_weapon %}
+                    <span class="rarity-{{ p.equipped_weapon.rarity }}">
+                      {{ p.equipped_weapon.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_helmet %}
+                    <span class="rarity-{{ p.equipped_helmet.rarity }}">
+                      {{ p.equipped_helmet.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_armor %}
+                    <span class="rarity-{{ p.equipped_armor.rarity }}">
+                      {{ p.equipped_armor.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_pants %}
+                    <span class="rarity-{{ p.equipped_pants.rarity }}">
+                      {{ p.equipped_pants.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_boots %}
+                    <span class="rarity-{{ p.equipped_boots.rarity }}">
+                      {{ p.equipped_boots.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_shield %}
+                    <span class="rarity-{{ p.equipped_shield.rarity }}">
+                      {{ p.equipped_shield.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_amulet1 %}
+                    <span class="rarity-{{ p.equipped_amulet1.rarity }}">
+                      {{ p.equipped_amulet1.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_amulet2 %}
+                    <span class="rarity-{{ p.equipped_amulet2.rarity }}">
+                      {{ p.equipped_amulet2.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {% if p.equipped_amulet3 %}
+                    <span class="rarity-{{ p.equipped_amulet3.rarity }}">
+                      {{ p.equipped_amulet3.name }}
+                    </span><br>
+                  {% endif %}
+
+                  <small class="text-muted">
+                    Stats: HP {{ s.hp }}, ATK {{ s.attack }}, DEF {{ s.defense }},
+                    CRIT {{ s.crit_chance }}%, ESQ {{ s.dodge_chance }}%, VEL {{ s.speed }}
+                  </small>
+
+                {% else %}
+                  <span class="text-muted">Sin equipo equipado</span>
+                {% endif %}
+              </td>
+
+              <td class="text-end">
+                <form method="post" action="{% url 'rpg_pvp_challenge' row.rank.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-danger rounded-pill">
+                    Desafiar
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endwith %}
+          {% empty %}
+            <tr>
+              <td colspan="4" class="text-muted">
+                No hay rivales disponibles.
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Columna derecha — último combate -->
+  <div class="col-lg-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Último combate</h5>
+
+        {% if last_battle %}
+          <p class="mb-1" style="font-size: 0.85rem;">
+            {{ last_battle.created_at|date:"d/m H:i" }}<br>
+            <strong>{{ last_battle.attacker.username }}</strong>
+            vs
+            <strong>{{ last_battle.defender.username }}</strong>
+          </p>
+
+          <pre class="bg-light p-2 rounded small"
+               style="max-height: 220px; overflow-y: auto; white-space: pre-wrap;">
+{{ last_battle.log_text }}
+          </pre>
+        {% else %}
+          <p class="text-muted">Aún no has participado en ningún combate PvP.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

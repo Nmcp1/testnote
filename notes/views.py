@@ -8,7 +8,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Max
+from django.db import transaction, IntegrityError
 from django.urls import reverse
 from django.http import HttpResponseForbidden
 from django.contrib import messages
@@ -29,6 +30,8 @@ from .models import (
     ItemSlot,
     ItemSource,
     GachaProbability,
+    PvpRanking,
+    PvpBattleLog
 )
 from .forms import (
     NoteForm,
@@ -638,13 +641,13 @@ LIGHT_SPEED = {
 }
 
 AMULET_CRIT = {
-    ItemRarity.BASIC: (0, 1),
-    ItemRarity.UNCOMMON: (1, 4),
-    ItemRarity.SPECIAL: (3, 8),
+    ItemRarity.BASIC: (1, 2),
+    ItemRarity.UNCOMMON: (3, 5),
+    ItemRarity.SPECIAL: (5, 9),
     ItemRarity.EPIC: (7, 15),
     ItemRarity.LEGENDARY: (12, 22),
-    ItemRarity.MYTHIC: (18, 35),
-    ItemRarity.ASCENDED: (30, 50),
+    ItemRarity.MYTHIC: (18, 25),
+    ItemRarity.ASCENDED: (20, 30),
 }
 
 AMULET_DODGE = AMULET_CRIT.copy()
@@ -659,6 +662,15 @@ AMULET_SPEED = {
     ItemRarity.ASCENDED: (18, 30),
 }
 
+AMULET_ATK = {
+    ItemRarity.BASIC: (1, 3),
+    ItemRarity.UNCOMMON: (3, 7),
+    ItemRarity.SPECIAL: (6, 15),
+    ItemRarity.EPIC: (12, 28),
+    ItemRarity.LEGENDARY: (25, 50),
+    ItemRarity.MYTHIC: (45, 80),
+    ItemRarity.ASCENDED: (75, 130),
+}
 
 def roll_range(rng, from_gacha):
     mn, mx = rng
@@ -679,16 +691,21 @@ def generate_item_stats(slot, rarity, from_gacha):
 
     if slot == ItemSlot.WEAPON:
         atk = roll_range(WEAPON_ATK[rarity], from_gacha)
+
     elif slot == ItemSlot.ARMOR:
         df = roll_range(ARMOR_DEF[rarity], from_gacha)
+
     elif slot == ItemSlot.SHIELD:
         df = roll_range(SHIELD_DEF[rarity], from_gacha)
         hp = roll_range(SHIELD_HP[rarity], from_gacha)
+
     elif slot in (ItemSlot.HELMET, ItemSlot.PANTS, ItemSlot.BOOTS):
         hp = roll_range(LIGHT_HP[rarity], from_gacha)
         df = roll_range(LIGHT_DEF[rarity], from_gacha)
         speed = roll_range(LIGHT_SPEED[rarity], from_gacha)
+
     elif slot == ItemSlot.AMULET:
+        atk = roll_range(AMULET_ATK[rarity], from_gacha)
         crit = float(roll_range(AMULET_CRIT[rarity], from_gacha))
         dodge = float(roll_range(AMULET_DODGE[rarity], from_gacha))
         speed = roll_range(AMULET_SPEED[rarity], from_gacha)
@@ -701,6 +718,7 @@ def generate_item_stats(slot, rarity, from_gacha):
         "dodge_chance": dodge,
         "speed": speed,
     }
+
 
 
 def get_total_stats(user):
@@ -1204,3 +1222,359 @@ def rpg_gacha_config(request):
         "rows": rows,
     }
     return render(request, "notes/rpg_gacha_config.html", context)
+
+# ============================================================
+#  PVP — helpers
+# ============================================================
+
+def ensure_all_pvp_rankings():
+    """
+    Crea entradas de ranking PVP para todos los usuarios que aún no tienen,
+    asignando posición inicial según fecha de registro (date_joined).
+    """
+    existing_user_ids = set(PvpRanking.objects.values_list("user_id", flat=True))
+    missing_users = User.objects.exclude(id__in=existing_user_ids).order_by("date_joined")
+
+    max_pos = PvpRanking.objects.aggregate(Max("position"))["position__max"] or 0
+    next_pos = max_pos + 1
+
+    for u in missing_users:
+        PvpRanking.objects.create(user=u, position=next_pos)
+        next_pos += 1
+
+
+def get_or_create_pvp_ranking(user: User) -> PvpRanking:
+    """
+    Devuelve el ranking PvP del usuario, creándolo si no existe.
+    Los nuevos usuarios se agregan al final del ranking.
+    """
+    ensure_all_pvp_rankings()
+    ranking, created = PvpRanking.objects.get_or_create(user=user)
+    if created:
+        max_pos = PvpRanking.objects.aggregate(Max("position"))["position__max"] or 0
+        ranking.position = max_pos + 1
+        ranking.save()
+    return ranking
+
+
+class BattleStats:
+    """
+    Helper simple para encapsular stats de combate.
+    """
+    def __init__(self, hp, attack, defense, crit_chance, dodge_chance, speed):
+        self.hp = hp
+        self.attack = attack
+        self.defense = defense
+        self.crit_chance = crit_chance
+        self.dodge_chance = dodge_chance
+        self.speed = speed
+
+
+def _stats_from_total(total_stats):
+    """
+    total_stats: lo que ya te devuelve get_total_stats(user),
+    adaptado al pequeño helper BattleStats.
+    """
+    return BattleStats(
+        hp=getattr(total_stats, "hp", 100),
+        attack=getattr(total_stats, "attack", 10),
+        defense=getattr(total_stats, "defense", 0),
+        crit_chance=getattr(total_stats, "crit_chance", 0),
+        dodge_chance=getattr(total_stats, "dodge_chance", 0),
+        speed=getattr(total_stats, "speed", 0),
+    )
+
+
+def simulate_pvp_battle(attacker_user: User, defender_user: User):
+    """
+    Simula un combate PvP usando exactamente los stats calculados en get_total_stats,
+    que devuelve un diccionario con hp, attack, defense, crit_chance, dodge_chance, speed.
+    """
+    atk = get_total_stats(attacker_user)
+    deff = get_total_stats(defender_user)
+
+    log = []
+    log.append(f"Combate PvP entre {attacker_user.username} y {defender_user.username}\n")
+
+    atk_hp = atk["hp"]
+    def_hp = deff["hp"]
+
+    atk_atk = atk["attack"]
+    atk_def = atk["defense"]
+    atk_crit = atk["crit_chance"]
+    atk_dodge = atk["dodge_chance"]
+    atk_speed = atk["speed"]
+
+    def_atk = deff["attack"]
+    def_def = deff["defense"]
+    def_crit = deff["crit_chance"]
+    def_dodge = deff["dodge_chance"]
+    def_speed = deff["speed"]
+
+    # Quién inicia
+    if atk_speed > def_speed:
+        turn = "A"
+    elif def_speed > atk_speed:
+        turn = "D"
+    else:
+        turn = random.choice(["A", "D"])
+
+    turno = 1
+
+    while atk_hp > 0 and def_hp > 0:
+        log.append(f"Turno {turno}")
+
+        if turn == "A":
+            # Ataca atacante
+            base = max(1, atk_atk - def_def)
+            crit = random.random() < (atk_crit / 100.0)
+            dodge = random.random() < (def_dodge / 100.0)
+
+            if dodge:
+                log.append(f" - {defender_user.username} esquiva el ataque.")
+                dmg = 0
+            else:
+                dmg = base * (2 if crit else 1)
+
+            def_hp -= dmg
+            log.append(f" - {attacker_user.username} hace {dmg} de daño.")
+            log.append(
+                f"   Vida: {attacker_user.username}={atk_hp} | {defender_user.username}={max(def_hp, 0)}"
+            )
+
+            turn = "D"
+
+        else:
+            # Ataca defensor
+            base = max(1, def_atk - atk_def)
+            crit = random.random() < (def_crit / 100.0)
+            dodge = random.random() < (atk_dodge / 100.0)
+
+            if dodge:
+                log.append(f" - {attacker_user.username} esquiva el ataque.")
+                dmg = 0
+            else:
+                dmg = base * (2 if crit else 1)
+
+            atk_hp -= dmg
+            log.append(f" - {defender_user.username} hace {dmg} de daño.")
+            log.append(
+                f"   Vida: {attacker_user.username}={max(atk_hp, 0)} | {defender_user.username}={def_hp}"
+            )
+
+            turn = "A"
+
+        log.append("")
+        turno += 1
+
+    if atk_hp > 0:
+        log.append(f"{attacker_user.username} gana el combate.")
+        return True, "\n".join(log)
+    else:
+        log.append(f"{defender_user.username} gana el combate.")
+        return False, "\n".join(log)
+
+
+@login_required
+def rpg_pvp_arena(request):
+    """
+    Pantalla principal de la arena PvP.
+    - Muestra tu puesto y recompensa diaria.
+    - Muestra hasta 3 rivales por encima de ti para desafiar.
+    - Muestra el último combate PvP.
+    """
+    profile = get_or_create_profile(request.user)
+    my_rank = get_or_create_pvp_ranking(request.user)
+    stats = get_total_stats(request.user)
+
+    # Aseguramos que existan rankings para todos
+    ensure_all_pvp_rankings()
+
+    # Rivales crudos: hasta 3 puestos por encima
+    raw_challengers = (
+        PvpRanking.objects
+        .select_related("user")
+        .filter(position__lt=my_rank.position)
+        .order_by("-position")[:3]
+    )
+
+    challengers = []
+    for rank in raw_challengers:
+        u = rank.user
+        p = get_or_create_profile(u)
+        s = get_total_stats(u)
+
+        # ¿Tiene algo equipado?
+        has_equipped = any([
+            p.equipped_weapon,
+            p.equipped_helmet,
+            p.equipped_armor,
+            p.equipped_pants,
+            p.equipped_boots,
+            p.equipped_shield,
+            p.equipped_amulet1,
+            p.equipped_amulet2,
+            p.equipped_amulet3,
+        ])
+
+        # ¿O stats distintos a los básicos?
+        has_stats = any([
+            s["hp"] != 100,
+            s["attack"] != 10,
+            s["defense"] != 0,
+            s["crit_chance"] != 0,
+            s["dodge_chance"] != 0,
+            s["speed"] != 0,
+        ])
+
+        challengers.append({
+            "rank": rank,
+            "user": u,
+            "profile": p,
+            "stats": s,
+            "has_equipment": has_equipped or has_stats,
+        })
+
+    # Último combate donde participe el usuario
+    last_battle = (
+        PvpBattleLog.objects
+        .filter(Q(attacker=request.user) | Q(defender=request.user))
+        .select_related("attacker", "defender")
+        .first()
+    )
+
+    # Recompensa diaria
+    today = date.today()
+    todays_reward = my_rank.daily_reward()
+    can_claim = todays_reward > 0 and my_rank.last_reward_date != today
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "claim_reward":
+            if not can_claim:
+                messages.info(
+                    request,
+                    "Ya has cobrado tu recompensa diaria o tu puesto no otorga monedas."
+                )
+            else:
+                profile.coins += todays_reward
+                profile.save()
+                my_rank.last_reward_date = today
+                my_rank.save()
+                messages.success(
+                    request,
+                    f"Has cobrado {todays_reward} monedas por tu puesto PvP #{my_rank.position}.",
+                )
+            return redirect("rpg_pvp_arena")
+
+    context = {
+        "profile": profile,
+        "my_rank": my_rank,
+        "challengers": challengers,
+        "last_battle": last_battle,
+        "todays_reward": todays_reward,
+        "can_claim": can_claim,
+        "stats": stats,
+    }
+    return render(request, "notes/rpg_pvp_arena.html", context)
+
+
+@require_POST
+@login_required
+def rpg_pvp_challenge(request, target_id):
+    """
+    El jugador desafía a un rival con mejor puesto (posición menor).
+    Solo se permite desafiar hasta 3 puestos por encima.
+    Si gana, intercambian posiciones de forma segura (sin romper el UNIQUE).
+    """
+    attacker = request.user
+    attacker_rank = get_or_create_pvp_ranking(attacker)
+
+    # Rival a desafiar (entrada de PvpRanking)
+    try:
+        target_rank = PvpRanking.objects.select_related("user").get(id=target_id)
+    except PvpRanking.DoesNotExist:
+        messages.error(request, "El rival no existe.")
+        return redirect("rpg_pvp_arena")
+
+    # No puedes desafiar a alguien por debajo o igual
+    if target_rank.position >= attacker_rank.position:
+        messages.error(request, "Solo puedes desafiar a jugadores con mejor clasificación que tú.")
+        return redirect("rpg_pvp_arena")
+
+    # Máximo 3 puestos por encima
+    if attacker_rank.position - target_rank.position > 3:
+        messages.error(request, "Solo puedes desafiar hasta 3 puestos por encima.")
+        return redirect("rpg_pvp_arena")
+
+    defender = target_rank.user
+
+    # Simulación de combate (usa el sistema de stats del RPG)
+    attacker_won, log_text = simulate_pvp_battle(attacker, defender)
+
+    # Guardar log
+    PvpBattleLog.objects.create(
+        attacker=attacker,
+        defender=defender,
+        attacker_won=attacker_won,
+        log_text=log_text,
+    )
+
+    if attacker_won:
+        old_attacker_pos = attacker_rank.position
+        old_target_pos = target_rank.position
+
+        try:
+            # Swap SEGURO usando una posición temporal que no esté en uso
+            with transaction.atomic():
+                max_pos = PvpRanking.objects.aggregate(Max("position"))["position__max"] or 0
+                temp_pos = max_pos + 1  # posición libre
+
+                # 1) Mover al atacante a una posición temporal
+                attacker_rank.position = temp_pos
+                attacker_rank.save(update_fields=["position"])
+
+                # 2) Mover al defensor al puesto original del atacante
+                target_rank.position = old_attacker_pos
+                target_rank.save(update_fields=["position"])
+
+                # 3) Mover al atacante al antiguo puesto del defensor
+                attacker_rank.position = old_target_pos
+                attacker_rank.save(update_fields=["position"])
+
+        except IntegrityError:
+            messages.error(
+                request,
+                "Ocurrió un problema al actualizar el ranking. Inténtalo de nuevo."
+            )
+            return redirect("rpg_pvp_arena")
+
+        messages.success(
+            request,
+            f"¡Has vencido a {defender.username} y ahora ocupas el puesto #{old_target_pos}!"
+        )
+    else:
+        messages.info(
+            request,
+            f"Has perdido contra {defender.username}. Tu clasificación permanece en #{attacker_rank.position}."
+        )
+
+    return redirect("rpg_pvp_arena")
+
+
+@login_required
+def rpg_pvp_leaderboard(request):
+    """
+    Muestra el top 10 del ranking PvP.
+    """
+    ensure_all_pvp_rankings()
+    top_ranks = (
+        PvpRanking.objects
+        .select_related("user")
+        .order_by("position")[:10]
+    )
+
+    context = {
+        "top_ranks": top_ranks,
+    }
+    return render(request, "notes/rpg_pvp_leaderboard.html", context)

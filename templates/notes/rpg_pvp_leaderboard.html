@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="fw-bold mb-3">Ranking PvP 🏆</h2>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
+    ← Volver al hub RPG
+  </a>
+  <a href="{% url 'rpg_pvp_arena' %}" class="btn btn-outline-danger btn-sm rounded-pill">
+    ⚔️ Ir a la arena
+  </a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h5 class="fw-bold mb-3">Top 10 jugadores</h5>
+
+    <table class="table table-striped align-middle" style="font-size: 0.95rem;">
+      <thead>
+        <tr>
+          <th style="width: 10%;">Puesto</th>
+          <th style="width: 40%;">Usuario</th>
+          <th style="width: 25%;">Recompensa diaria</th>
+          <th style="width: 25%;">Eres tú</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in top_ranks %}
+        <tr {% if r.user == request.user %}class="table-warning fw-semibold"{% endif %}>
+          <td>#{{ r.position }}</td>
+          <td>@{{ r.user.username }}</td>
+          <td>{{ r.daily_reward }} monedas</td>
+          <td>
+            {% if r.user == request.user %}
+              ✅
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" class="text-muted">
+            Aún no hay jugadores registrados en el ranking.
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <p class="text-muted mt-2 mb-0" style="font-size: 0.85rem;">
+      Los puestos iniciales se asignan según la fecha de registro de la cuenta.
+      Si ganas combates PvP, puedes subir en la clasificación.
+    </p>
+  </div>
+</div>
+
+{% endblock %}

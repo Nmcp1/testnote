@@ -285,3 +285,60 @@ class GachaProbability(models.Model):
 
     def __str__(self):
         return f"{self.get_rarity_display()}: {self.probability:.6f}"
+
+# --- PVP ARENA -------------------------------------------------------
+
+class PvpRanking(models.Model):
+    """
+    Ranking PvP por puestos.
+    position = 1 es el top1, 2 es top2, etc.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="pvp_ranking",
+    )
+    position = models.PositiveIntegerField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_reward_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["position"]
+
+    def __str__(self):
+        return f"PvP #{self.position} - {self.user.username}"
+
+    def daily_reward(self) -> int:
+        """
+        Top1 = 200, top2 = 180, bajando de 20 en 20 hasta 0.
+        """
+        base = 200
+        reward = base - 20 * (self.position - 1)
+        return max(reward, 0)
+
+
+class PvpBattleLog(models.Model):
+    """
+    Log de combates PvP entre jugadores.
+    """
+    attacker = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="pvp_battles_as_attacker",
+    )
+    defender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="pvp_battles_as_defender",
+    )
+    attacker_won = models.BooleanField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    log_text = models.TextField()
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        result = "ganó" if self.attacker_won else "perdió"
+        return f"{self.attacker.username} {result} contra {self.defender.username} (PvP)"
+

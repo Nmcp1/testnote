@@ -61,7 +61,7 @@
                     </li>
                 {% endif %}
 
-                <!-- Leaderboard -->
+                <!-- Leaderboard monedas -->
                 <li class="nav-item">
                     <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
                        href="{% url 'leaderboard' %}">
@@ -89,6 +89,7 @@
                     </a>
                     <ul class="dropdown-menu" aria-labelledby="gamesDropdown">
 
+                        <!-- Minijuego Minas -->
                         <li>
                             <a class="dropdown-item" href="{% url 'mine_game' %}">
                                 💣 Minijuego de Minas
@@ -97,6 +98,7 @@
 
                         <li><hr class="dropdown-divider"></li>
 
+                        <!-- RPG PvE -->
                         <li>
                             <a class="dropdown-item" href="{% url 'rpg_hub' %}">
                                 🗡️ RPG — Torre
@@ -118,6 +120,21 @@
                         <li>
                             <a class="dropdown-item" href="{% url 'rpg_gacha' %}">
                                 ⭐ Gacha
+                            </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <!-- RPG PvP -->
+                        <li>
+                            <a class="dropdown-item" href="{% url 'rpg_pvp_arena' %}">
+                                ⚔️ Arena PvP
+                            </a>
+                        </li>
+
+                        <li>
+                            <a class="dropdown-item" href="{% url 'rpg_pvp_leaderboard' %}">
+                                🏆 Ranking PvP
                             </a>
                         </li>
 
