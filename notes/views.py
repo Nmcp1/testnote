@@ -1,6 +1,6 @@
 import random
 from math import pow
-from datetime import date
+from datetime import date, timedelta
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login as auth_login
@@ -33,7 +33,9 @@ from .models import (
     GachaProbability,
     PvpRanking,
     PvpBattleLog,
-    Trade
+    Trade,
+    WorldBossCycle,
+    WorldBossParticipant,
 )
 from .forms import (
     NoteForm,
@@ -2065,3 +2067,212 @@ def rpg_trade_detail(request, trade_id):
         "is_from_side": is_from_side,
     }
     return render(request, "notes/rpg_trade_detail.html", context)
+
+# ============================================================
+#  WORLD BOSS
+# ============================================================
+
+def _get_current_world_boss_cycle():
+    """
+    Cada día se divide en bloques de 3 horas empezando a las 00:00 (hora local).
+    Este helper devuelve el ciclo actual de World Boss (prep/batalla/reposo).
+    """
+    now = timezone.localtime(timezone.now())
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    minutes_since_midnight = now.hour * 60 + now.minute
+    block_minutes = 3 * 60  # 3 horas
+    cycle_index = minutes_since_midnight // block_minutes
+
+    cycle_start = start_of_day + timedelta(hours=3 * cycle_index)
+
+    cycle, _ = WorldBossCycle.objects.get_or_create(start_time=cycle_start)
+    return cycle, now, cycle_start
+
+
+def _advance_world_boss_battle(cycle: WorldBossCycle, now_local, cycle_start):
+    """
+    Avanza los turnos de la batalla en base al tiempo real transcurrido desde
+    el inicio de la fase de batalla. 1 turno = 1 minuto.
+    El jefe:
+      - recibe daño: sumamos el ataque de cada jugador vivo (sin defensa)
+      - golpea a todos los jugadores vivos con 50 de daño fijo.
+    La batalla termina cuando todos los participantes tienen 0 o menos de HP.
+    Al terminar:
+      - Se reparten 5 monedas por cada 100 puntos de daño TOTAL recibido
+        a TODOS los participantes de este ciclo.
+    """
+    if cycle.finished:
+        return
+
+    battle_start = cycle_start + timedelta(hours=1)  # prep = 1h, luego batalla
+
+    # Si aún no empieza la fase de batalla, no hacemos nada
+    if now_local <= battle_start:
+        return
+
+    # ¿Cuántos turnos deberían haberse ejecutado hasta ahora?
+    total_minutes = int((now_local - battle_start).total_seconds() // 60)
+    pending_turns = total_minutes - cycle.turns_processed
+    if pending_turns <= 0:
+        return
+
+    participants = list(
+        cycle.participants.select_related("user")
+    )
+    if not participants:
+        # Nadie participó: marcamos como terminada.
+        cycle.finished = True
+        cycle.save()
+        return
+
+    log_lines = []
+    turn_number = cycle.turns_processed + 1
+
+    for _ in range(pending_turns):
+        # Jugadores vivos al inicio de este turno
+        alive = [p for p in participants if p.current_hp > 0]
+        if not alive:
+            cycle.finished = True
+            break
+
+        log_lines.append(f"Turno {turn_number}")
+
+        # 1) Todos los jugadores golpean al jefe
+        for p in alive:
+            stats = get_total_stats(p.user)
+            dmg = max(1, stats["attack"])  # sin defensa del jefe
+            p.total_damage_done += dmg
+            cycle.total_damage += dmg
+            log_lines.append(f"- {p.user.username} inflige {dmg} de daño al jefe.")
+
+        # 2) El jefe golpea a todos con 50 de daño fijo
+        log_lines.append(f"- El jefe golpea a todos y hace 50 de daño.")
+        for p in alive:
+            p.current_hp -= 50
+            if p.current_hp <= 0:
+                p.current_hp = 0
+                log_lines.append(f"  · {p.user.username} ha sido derrotado.")
+
+        log_lines.append("")
+        turn_number += 1
+        cycle.turns_processed += 1
+
+    # Guardamos cambios en los participantes
+    WorldBossParticipant.objects.bulk_update(
+        participants,
+        ["current_hp", "total_damage_done"],
+    )
+
+    # Append del log
+    if log_lines:
+        new_block = "\n".join(log_lines)
+        if cycle.battle_log:
+            cycle.battle_log += "\n" + new_block
+        else:
+            cycle.battle_log = new_block
+
+    # ¿Queda alguien vivo?
+    if not any(p.current_hp > 0 for p in participants):
+        cycle.finished = True
+
+    # Si la batalla acaba y aún no se han repartido las recompensas, las damos
+    if cycle.finished and not cycle.rewards_given and cycle.total_damage > 0:
+        reward_per_player = (cycle.total_damage // 100) * 5
+        if reward_per_player > 0:
+            for p in participants:
+                prof = get_or_create_profile(p.user)
+                prof.coins += reward_per_player
+                prof.save()
+        cycle.rewards_given = True
+
+    cycle.save()
+
+
+@login_required
+def rpg_world_boss(request):
+    """
+    Vista principal de la World Boss Battle.
+    Estados:
+      - preparación (1h): los jugadores se pueden unir.
+      - batalla (hasta 2h dentro del bloque): se simula 1 turno por minuto.
+      - reposo (hasta el final del bloque de 3h): se ve log y daño total.
+    """
+    cycle, now_local, cycle_start = _get_current_world_boss_cycle()
+
+    elapsed = now_local - cycle_start
+    hours = elapsed.total_seconds() / 3600.0
+
+    if cycle.finished:
+        phase = "rest"
+    else:
+        if hours < 1:
+            phase = "prep"
+        elif hours < 2:
+            phase = "battle"
+        else:
+            phase = "rest"
+
+    prep_end = cycle_start + timedelta(hours=1)
+    battle_start = cycle_start + timedelta(hours=1)
+    battle_end = cycle_start + timedelta(hours=2)
+    cycle_end = cycle_start + timedelta(hours=3)
+
+    profile = get_or_create_profile(request.user)
+    stats = get_total_stats(request.user)
+
+    participation = WorldBossParticipant.objects.filter(
+        cycle=cycle,
+        user=request.user,
+    ).first()
+
+    # Unirse durante fase de preparación
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "join" and phase == "prep":
+            if participation is None:
+                participation = WorldBossParticipant.objects.create(
+                    cycle=cycle,
+                    user=request.user,
+                    current_hp=stats["hp"],
+                    total_damage_done=0,
+                )
+                messages.success(
+                    request,
+                    "Te has unido a la próxima batalla contra el World Boss."
+                )
+            else:
+                messages.info(request, "Ya estás inscrito en esta batalla.")
+            return redirect("rpg_world_boss")
+
+    # Si estamos en batalla, avanzamos los turnos según el tiempo real
+    if phase == "battle":
+        _advance_world_boss_battle(cycle, now_local, cycle_start)
+
+    # Refrescamos datos después de posible simulación
+    participants_qs = cycle.participants.select_related("user").order_by(
+        "-total_damage_done",
+        "user__username",
+    )
+    participation = participants_qs.filter(user=request.user).first()
+    total_damage = cycle.total_damage
+    hero = participants_qs.first() if total_damage > 0 else None
+    reward_preview = (total_damage // 100) * 5
+
+    context = {
+        "profile": profile,
+        "stats": stats,
+        "cycle": cycle,
+        "phase": phase,
+        "participants": participants_qs,
+        "participation": participation,
+        "hero": hero,
+        "total_damage": total_damage,
+        "reward_preview": reward_preview,
+        "prep_end": prep_end,
+        "battle_start": battle_start,
+        "battle_end": battle_end,
+        "cycle_end": cycle_end,
+        "now": now_local,
+    }
+    return render(request, "notes/rpg_world_boss.html", context)

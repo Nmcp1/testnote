@@ -417,3 +417,55 @@ class Trade(models.Model):
     def __str__(self):
         return f"Trade #{self.pk} {self.from_user} ↔ {self.to_user} ({self.status})"
 
+class WorldBossCycle(models.Model):
+    """
+    Un ciclo de World Boss dura 3 horas (anclado a las 00:00 del día):
+      - 1h de preparación (join)
+      - 1h de batalla (1 turno por minuto, en base al tiempo real transcurrido)
+      - 1h de reposo (se ve el log y el daño total)
+    """
+    start_time = models.DateTimeField(help_text="Inicio local del ciclo (fase de preparación).")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    total_damage = models.PositiveIntegerField(default=0)
+    turns_processed = models.PositiveIntegerField(default=0)
+
+    finished = models.BooleanField(default=False)
+    rewards_given = models.BooleanField(default=False)
+
+    battle_log = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-start_time"]
+        unique_together = ("start_time",)
+
+    def __str__(self):
+        local_start = timezone.localtime(self.start_time)
+        return f"WorldBoss {local_start.strftime('%Y-%m-%d %H:%M')}"
+
+
+class WorldBossParticipant(models.Model):
+    """
+    Participación de un jugador en un ciclo de World Boss.
+    Se guarda su HP actual y el daño total que ha hecho.
+    """
+    cycle = models.ForeignKey(
+        WorldBossCycle,
+        on_delete=models.CASCADE,
+        related_name="participants",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="worldboss_participations",
+    )
+    current_hp = models.IntegerField()
+    total_damage_done = models.PositiveIntegerField(default=0)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("cycle", "user")
+        ordering = ["-total_damage_done", "user__username"]
+
+    def __str__(self):
+        return f"{self.user.username} en {self.cycle}"

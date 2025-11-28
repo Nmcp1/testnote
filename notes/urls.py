@@ -25,4 +25,5 @@ urlpatterns = [
     path("rpg/trades/", views.rpg_trades, name="rpg_trades"),
     path("rpg/trades/new/", views.rpg_trade_create, name="rpg_trade_create"),
     path("rpg/trades/<int:trade_id>/", views.rpg_trade_detail, name="rpg_trade_detail"),
+    path('rpg/world-boss/', views.rpg_world_boss, name='rpg_world_boss'),
 ]

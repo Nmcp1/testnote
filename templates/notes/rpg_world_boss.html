@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% load tz %}
+{% block content %}
+
+<h2 class="fw-bold mb-3">World Boss — Batalla global</h2>
+
+<div class="mb-3 d-flex flex-wrap align-items-center gap-2">
+  <span class="badge
+        {% if phase == 'prep' %}bg-info text-dark
+        {% elif phase == 'battle' %}bg-danger
+        {% else %}bg-secondary
+        {% endif %}">
+    Fase:
+    {% if phase == "prep" %}Preparación{% elif phase == "battle" %}Batalla{% else %}Reposo{% endif %}
+  </span>
+
+  <small class="text-muted">
+    Ciclo actual:
+    {{ cycle.start_time|localtime|date:"d/m/Y H:i" }} — {{ cycle_end|localtime|date:"H:i" }}
+  </small>
+</div>
+
+<div class="row g-3">
+
+  <!-- Panel izquierdo: info general + unirse -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Resumen del ciclo</h5>
+
+        <p class="mb-1" style="font-size: 0.9rem;">
+          Daño total al jefe:
+          <strong>{{ total_damage }}</strong>
+        </p>
+
+        <p class="mb-1" style="font-size: 0.9rem;">
+          Turnos procesados:
+          <strong>{{ cycle.turns_processed }}</strong>
+        </p>
+
+        <p class="mb-2" style="font-size: 0.9rem;">
+          Recompensa estimada:
+          <strong>{{ reward_preview }} monedas por jugador</strong>
+          <span class="text-muted">(5 por cada 100 de daño)</span>
+        </p>
+
+        {% if hero %}
+          <div class="alert alert-warning py-2 px-3" style="font-size: 0.9rem;">
+            👑 <strong>Jugador heroico:</strong>
+            {{ hero.user.username }}
+            <br>
+            <span class="small text-muted">
+              Daño infligido: {{ hero.total_damage_done }}
+            </span>
+          </div>
+        {% endif %}
+
+        <hr>
+
+        <h6 class="fw-bold" style="font-size: 0.9rem;">Tu estado</h6>
+        <p class="mb-1" style="font-size: 0.9rem;">
+          Monedas: <strong>{{ profile.coins }}</strong>
+        </p>
+
+        {% if participation %}
+          <p class="mb-1" style="font-size: 0.9rem;">
+            HP actual en esta batalla:
+            <strong>{{ participation.current_hp }}</strong>
+          </p>
+          <p class="mb-2" style="font-size: 0.9rem;">
+            Daño que has hecho al jefe:
+            <strong>{{ participation.total_damage_done }}</strong>
+          </p>
+        {% else %}
+          <p class="mb-2 text-muted" style="font-size: 0.9rem;">
+            Aún no te has unido a este ciclo.
+          </p>
+        {% endif %}
+
+        {% if phase == "prep" %}
+          <hr>
+          <p class="mb-1" style="font-size: 0.85rem;">
+            Fase de preparación hasta:
+            <strong>{{ prep_end|localtime|date:"H:i" }}</strong>
+          </p>
+
+          {% if participation %}
+            <p class="text-success mb-2" style="font-size: 0.85rem;">
+              ✅ Ya estás inscrito para la próxima batalla.
+            </p>
+          {% else %}
+            <form method="post" class="mt-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="join">
+              <button class="btn btn-primary w-100 rounded-pill">
+                Unirse a la batalla
+              </button>
+            </form>
+          {% endif %}
+        {% elif phase == "battle" %}
+          <hr>
+          <p class="mb-1" style="font-size: 0.85rem;">
+            La batalla está en curso hasta:
+            <strong>{{ battle_end|localtime|date:"H:i" }}</strong>
+          </p>
+          <p class="text-muted mb-0" style="font-size: 0.8rem;">
+            Se procesa 1 turno por minuto basado en la hora real del servidor.
+          </p>
+        {% else %}
+          <hr>
+          <p class="mb-0" style="font-size: 0.85rem;">
+            Fase de reposo hasta:
+            <strong>{{ cycle_end|localtime|date:"H:i" }}</strong>.
+            El siguiente ciclo comenzará con otra fase de preparación.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel derecho: participantes + log -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column">
+
+        <!-- Participantes -->
+        <div class="mb-3">
+          <h5 class="fw-bold mb-2">Participantes</h5>
+          {% if participants %}
+            <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+              <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Jugador</th>
+                    <th class="text-end">HP actual</th>
+                    <th class="text-end">Daño hecho</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for p in participants %}
+                    <tr {% if hero and hero.id == p.id %}class="table-warning"{% endif %}>
+                      <td>{{ p.user.username }}</td>
+                      <td class="text-end">{{ p.current_hp }}</td>
+                      <td class="text-end">{{ p.total_damage_done }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted" style="font-size: 0.9rem;">
+              Aún no hay jugadores inscritos en este ciclo.
+            </p>
+          {% endif %}
+        </div>
+
+        <hr class="my-3">
+
+        <!-- Log de batalla -->
+        <div class="flex-grow-1 d-flex flex-column">
+          <h5 class="fw-bold mb-2">Registro de la batalla</h5>
+          <div class="border rounded p-2 bg-light flex-grow-1"
+               style="max-height: 260px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+            {% if cycle.battle_log %}
+              <pre class="mb-0" style="white-space: pre-wrap;">{{ cycle.battle_log }}</pre>
+            {% else %}
+              <p class="text-muted mb-0">
+                Aún no hay turnos registrados para este ciclo.
+              </p>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
