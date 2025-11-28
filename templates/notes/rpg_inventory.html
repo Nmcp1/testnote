@@ -20,7 +20,7 @@
 </div>
 
 <div class="row g-3">
-  <!-- Columna izquierda: stats -->
+  <!-- Columna izquierda: stats + equipo actual -->
   <div class="col-lg-3">
     <div class="card shadow-sm h-100">
       <div class="card-body">
@@ -34,9 +34,108 @@
         <p class="mb-2" style="font-size: 0.9rem;">Velocidad: <strong>{{ stats.speed }}</strong></p>
 
         <hr class="my-2">
-        <p class="mb-0" style="font-size: 0.9rem;">
+
+        <p class="mb-2" style="font-size: 0.9rem;">
           Monedas actuales: <strong>{{ profile.coins }}</strong>
         </p>
+
+        <hr class="my-2">
+
+        <h6 class="fw-bold mb-2" style="font-size: 0.95rem;">Equipamiento actual</h6>
+
+        <div style="font-size: 0.8rem;">
+          <p class="mb-1">
+            Arma:
+            {% if profile.equipped_weapon %}
+              <span class="rarity-{{ profile.equipped_weapon.rarity }}">
+                {{ profile.equipped_weapon.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Casco:
+            {% if profile.equipped_helmet %}
+              <span class="rarity-{{ profile.equipped_helmet.rarity }}">
+                {{ profile.equipped_helmet.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Armadura:
+            {% if profile.equipped_armor %}
+              <span class="rarity-{{ profile.equipped_armor.rarity }}">
+                {{ profile.equipped_armor.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Pantalones:
+            {% if profile.equipped_pants %}
+              <span class="rarity-{{ profile.equipped_pants.rarity }}">
+                {{ profile.equipped_pants.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Botas:
+            {% if profile.equipped_boots %}
+              <span class="rarity-{{ profile.equipped_boots.rarity }}">
+                {{ profile.equipped_boots.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Escudo:
+            {% if profile.equipped_shield %}
+              <span class="rarity-{{ profile.equipped_shield.rarity }}">
+                {{ profile.equipped_shield.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Amuleto 1:
+            {% if profile.equipped_amulet1 %}
+              <span class="rarity-{{ profile.equipped_amulet1.rarity }}">
+                {{ profile.equipped_amulet1.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-1">
+            Amuleto 2:
+            {% if profile.equipped_amulet2 %}
+              <span class="rarity-{{ profile.equipped_amulet2.rarity }}">
+                {{ profile.equipped_amulet2.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+          <p class="mb-0">
+            Amuleto 3:
+            {% if profile.equipped_amulet3 %}
+              <span class="rarity-{{ profile.equipped_amulet3.rarity }}">
+                {{ profile.equipped_amulet3.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+        </div>
+
       </div>
     </div>
   </div>
@@ -69,6 +168,9 @@
           <table class="table table-sm align-middle">
             <thead>
               <tr>
+                <th style="width: 2rem;">
+                  <!-- Placeholder para checkbox de cabecera si quieres "seleccionar todos" más adelante -->
+                </th>
                 <th>Nombre</th>
                 <th>Tipo</th>
                 <th>Rareza</th>
@@ -79,8 +181,13 @@
             </thead>
             <tbody>
             {% for item in items %}
-              {# item.rarity es el código (basic, uncommon, etc) #}
               <tr>
+                <td>
+                  <input type="checkbox"
+                         form="bulk-sell-form"
+                         name="selected_items"
+                         value="{{ item.id }}">
+                </td>
                 <td>
                   <span class="rarity-{{ item.rarity }}">
                     {{ item.name }}
@@ -138,15 +245,6 @@
                     </button>
                   </form>
 
-                  <!-- Formulario para vender -->
-                  <form method="post" class="d-inline-block ms-1">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="sell">
-                    <input type="hidden" name="item_id" value="{{ item.id }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                      Vender
-                    </button>
-                  </form>
 
                 </td>
               </tr>
@@ -154,6 +252,18 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Formulario de venta múltiple -->
+        <form id="bulk-sell-form" method="post" class="mt-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="sell_bulk">
+          <button type="submit"
+                  class="btn btn-danger btn-sm"
+                  onclick="return confirm('¿Estás seguro que quieres vender todos los items seleccionados?');">
+            Vender todos los items seleccionados
+          </button>
+        </form>
+
         {% else %}
           <p class="text-muted mb-0">No tienes objetos en tu inventario aún.</p>
         {% endif %}

@@ -1126,7 +1126,7 @@ def rpg_inventory(request):
     if slot_filter in valid_slots:
         items_qs = items_qs.filter(slot=slot_filter)
 
-    # Ordenar por rareza (más alta primero) y dentro de la misma rareza por fecha de creación desc
+    # Ordenar por rareza (más alta primero) y dentro de la misma rareza por fecha
     def rarity_key(it):
         base = RARITY_ORDER.get(it.rarity, 0)
         created = it.created_at or timezone.now()
@@ -1196,13 +1196,12 @@ def rpg_inventory(request):
             return redirect("rpg_inventory")
 
         # ------------------
-        # VENDER ITEM
+        # VENDER UN SOLO ITEM
         # ------------------
         elif action == "sell":
             item_id = request.POST.get("item_id")
             item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
 
-            # No permitir vender un item equipado
             if item.id in equipped_ids:
                 messages.error(
                     request,
@@ -1210,7 +1209,6 @@ def rpg_inventory(request):
                 )
                 return redirect("rpg_inventory")
 
-            # Calcular valor según rareza
             value = RARITY_SELL_VALUE.get(item.rarity, 0)
             if value <= 0:
                 messages.error(request, "Este objeto no se puede vender.")
@@ -1225,6 +1223,58 @@ def rpg_inventory(request):
                 request,
                 f"Has vendido {name} por {value} monedas."
             )
+            return redirect("rpg_inventory")
+
+        # ------------------
+        # VENTA MÚLTIPLE
+        # ------------------
+        elif action == "sell_bulk":
+            selected_ids = request.POST.getlist("selected_items")
+            if not selected_ids:
+                messages.info(request, "No seleccionaste ningún objeto para vender.")
+                return redirect("rpg_inventory")
+
+            items_to_sell_qs = CombatItem.objects.filter(
+                owner=request.user,
+                pk__in=selected_ids
+            )
+
+            total_value = 0
+            sold_count = 0
+            blocked_count = 0
+
+            for it in items_to_sell_qs:
+                if it.id in equipped_ids:
+                    blocked_count += 1
+                    continue
+
+                value = RARITY_SELL_VALUE.get(it.rarity, 0)
+                if value <= 0:
+                    continue
+
+                total_value += value
+                sold_count += 1
+                it.delete()
+
+            if sold_count > 0:
+                profile.coins += total_value
+                profile.save()
+                msg = f"Has vendido {sold_count} objeto(s) por un total de {total_value} monedas."
+                if blocked_count > 0:
+                    msg += f" {blocked_count} objeto(s) equipados no se vendieron."
+                messages.success(request, msg)
+            else:
+                if blocked_count > 0:
+                    messages.error(
+                        request,
+                        "Todos los objetos seleccionados estaban equipados y no se pudieron vender."
+                    )
+                else:
+                    messages.info(
+                        request,
+                        "No se pudo vender ningún objeto con los criterios actuales."
+                    )
+
             return redirect("rpg_inventory")
 
     # Recalcular stats y equipados tras cambios
@@ -1247,6 +1297,7 @@ def rpg_inventory(request):
         "slot_filter": slot_filter,
     }
     return render(request, "notes/rpg_inventory.html", context)
+
 
 
 
