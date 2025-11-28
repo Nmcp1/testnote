@@ -42,6 +42,8 @@ from .forms import (
 
 MODERATOR_GROUP_NAME = "moderador"
 MINE_GAME_SESSION_KEY = "mine_game_state"
+GACHA_LAST_SLOT_SESSION_KEY = "rpg_gacha_last_slot"
+
 
 
 def ensure_moderator_group_exists():
@@ -672,6 +674,26 @@ AMULET_ATK = {
     ItemRarity.ASCENDED: (75, 130),
 }
 
+RARITY_SELL_VALUE = {
+    ItemRarity.BASIC: 2,
+    ItemRarity.UNCOMMON: 20,
+    ItemRarity.SPECIAL: 50,
+    ItemRarity.EPIC: 100,
+    ItemRarity.LEGENDARY: 300,
+    ItemRarity.MYTHIC: 500,
+    ItemRarity.ASCENDED: 1000,
+}
+
+RARITY_ORDER = {
+    ItemRarity.BASIC: 0,
+    ItemRarity.UNCOMMON: 1,
+    ItemRarity.SPECIAL: 2,
+    ItemRarity.EPIC: 3,
+    ItemRarity.LEGENDARY: 4,
+    ItemRarity.MYTHIC: 5,
+    ItemRarity.ASCENDED: 6,
+}
+
 def roll_range(rng, from_gacha):
     mn, mx = rng
     if not from_gacha:
@@ -932,13 +954,21 @@ def rpg_gacha(request):
     rolled_item = None
     rolled_rarity = None
 
+    # Último slot seleccionado (por defecto: arma)
+    selected_slot = request.session.get(GACHA_LAST_SLOT_SESSION_KEY, "weapon")
+
     if request.method == "POST":
-        slot_code = request.POST.get("slot")
+        slot_code = request.POST.get("slot", selected_slot)
+
         try:
             slot = ItemSlot(slot_code)
         except ValueError:
             messages.error(request, "Slot inválido.")
             return redirect("rpg_gacha")
+
+        # Guardamos el último slot usado en la sesión
+        request.session[GACHA_LAST_SLOT_SESSION_KEY] = slot.value
+        selected_slot = slot.value
 
         COST = 15
         if profile.coins < COST:
@@ -989,8 +1019,10 @@ def rpg_gacha(request):
         "rolled_item": rolled_item,
         "rolled_rarity": rolled_rarity,
         "probabilities": probabilities,
+        "selected_slot": selected_slot,
     }
     return render(request, "notes/rpg_gacha.html", context)
+
 
 
 @login_required
@@ -1089,12 +1121,20 @@ def rpg_inventory(request):
 
     # Filtro por tipo de slot
     slot_filter = request.GET.get("slot", "all")
-    items_qs = CombatItem.objects.filter(owner=request.user).order_by("-created_at")
+    items_qs = CombatItem.objects.filter(owner=request.user)
     valid_slots = {s.value for s in ItemSlot}
     if slot_filter in valid_slots:
         items_qs = items_qs.filter(slot=slot_filter)
-    items = items_qs
 
+    # Ordenar por rareza (más alta primero) y dentro de la misma rareza por fecha de creación desc
+    def rarity_key(it):
+        base = RARITY_ORDER.get(it.rarity, 0)
+        created = it.created_at or timezone.now()
+        return (base, created)
+
+    items = sorted(items_qs, key=rarity_key, reverse=True)
+
+    # IDs de items equipados (para mostrar "Equipado" y evitar venderlos)
     equipped_ids = set()
     for field in [
         "equipped_weapon", "equipped_helmet", "equipped_armor",
@@ -1107,6 +1147,10 @@ def rpg_inventory(request):
 
     if request.method == "POST":
         action = request.POST.get("action")
+
+        # ------------------
+        # EQUIPAR ITEM
+        # ------------------
         if action == "equip":
             item_id = request.POST.get("item_id")
             item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
@@ -1114,37 +1158,76 @@ def rpg_inventory(request):
             if item.slot == ItemSlot.WEAPON:
                 profile.equipped_weapon = item
                 messages.success(request, f"Has equipado {item.name} como arma.")
+
             elif item.slot == ItemSlot.HELMET:
                 profile.equipped_helmet = item
                 messages.success(request, f"Has equipado {item.name} como casco.")
+
             elif item.slot == ItemSlot.ARMOR:
                 profile.equipped_armor = item
                 messages.success(request, f"Has equipado {item.name} como armadura.")
+
             elif item.slot == ItemSlot.PANTS:
                 profile.equipped_pants = item
                 messages.success(request, f"Has equipado {item.name} como pantalones.")
+
             elif item.slot == ItemSlot.BOOTS:
                 profile.equipped_boots = item
                 messages.success(request, f"Has equipado {item.name} como botas.")
+
             elif item.slot == ItemSlot.SHIELD:
                 profile.equipped_shield = item
                 messages.success(request, f"Has equipado {item.name} como escudo.")
+
             elif item.slot == ItemSlot.AMULET:
-                if profile.equipped_amulet1 is None:
-                    profile.equipped_amulet1 = item
-                    messages.success(request, f"Has equipado {item.name} en Amuleto 1.")
-                elif profile.equipped_amulet2 is None:
+                # Elegir slot de amuleto 1 / 2 / 3
+                slot_choice = request.POST.get("amulet_slot", "1")
+                if slot_choice == "2":
                     profile.equipped_amulet2 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 2.")
-                elif profile.equipped_amulet3 is None:
+                elif slot_choice == "3":
                     profile.equipped_amulet3 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 3.")
                 else:
                     profile.equipped_amulet1 = item
-                    messages.success(request, f"Has reemplazado el Amuleto 1 con {item.name}.")
+                    messages.success(request, f"Has equipado {item.name} en Amuleto 1.")
+
             profile.save()
             return redirect("rpg_inventory")
 
+        # ------------------
+        # VENDER ITEM
+        # ------------------
+        elif action == "sell":
+            item_id = request.POST.get("item_id")
+            item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
+
+            # No permitir vender un item equipado
+            if item.id in equipped_ids:
+                messages.error(
+                    request,
+                    "No puedes vender un objeto que tienes equipado. Desequípalo primero."
+                )
+                return redirect("rpg_inventory")
+
+            # Calcular valor según rareza
+            value = RARITY_SELL_VALUE.get(item.rarity, 0)
+            if value <= 0:
+                messages.error(request, "Este objeto no se puede vender.")
+                return redirect("rpg_inventory")
+
+            profile.coins += value
+            profile.save()
+            name = item.name
+            item.delete()
+
+            messages.success(
+                request,
+                f"Has vendido {name} por {value} monedas."
+            )
+            return redirect("rpg_inventory")
+
+    # Recalcular stats y equipados tras cambios
     stats = get_total_stats(request.user)
     equipped_ids = set()
     for field in [
@@ -1164,6 +1247,8 @@ def rpg_inventory(request):
         "slot_filter": slot_filter,
     }
     return render(request, "notes/rpg_inventory.html", context)
+
+
 
 
 @login_required
