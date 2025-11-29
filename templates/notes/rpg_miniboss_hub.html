@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="fw-bold mb-3">RPG — Minijefes</h2>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Resumen diario</h5>
+        <p class="mb-1">
+          Participaciones usadas hoy:
+          <strong>{{ today_count }}/3</strong>
+        </p>
+        <p class="mb-0 text-muted" style="font-size: 0.9rem;">
+          Solo puedes participar en <strong>3 minijefes</strong> por día (contando lobbies que creas o te unes).
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Tu personaje</h5>
+        <p class="mb-1">Usuario: <strong>{{ request.user.username }}</strong></p>
+        <p class="mb-1">Monedas: <strong>{{ profile.coins }}</strong></p>
+        <p class="mb-1 text-muted" style="font-size: 0.9rem;">
+          Equípate bien antes de entrar a los minijefes para maximizar tu daño y recompensas.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h4 class="fw-bold mb-2">Elegir minijefe</h4>
+<div class="row g-3 mb-4">
+  {% for boss in bosses %}
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column">
+        <h5 class="fw-bold">{{ boss.name }}</h5>
+        <p class="mb-1">Daño por turno: <strong>{{ boss.damage_per_turn }}</strong></p>
+        <p class="mb-1">Recompensa: <strong>5 moneda</strong> por cada <strong>100 daño</strong></p>
+        <p class="mb-2">Máximo por batalla: <strong>{{ boss.max_reward }} monedas</strong></p>
+        <div class="mt-auto">
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="boss_code" value="{{ boss.code }}">
+            <button class="btn btn-primary w-100"
+                    {% if remaining <= 0 %}disabled{% endif %}>
+              Crear lobby contra {{ boss.name }}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<h4 class="fw-bold mb-2">Lobbies en espera</h4>
+<div class="card shadow-sm">
+  <div class="card-body">
+    {% if waiting_lobbies %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Jefe</th>
+              <th>Creador</th>
+              <th>Creado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in waiting_lobbies %}
+              <tr>
+                <td>{{ row.boss_name }}</td>
+                <td>{{ row.lobby.creator.username }}</td>
+                <td>{{ row.lobby.created_at|date:"d/m/Y H:i" }}</td>
+                <td class="text-end">
+                  <a href="{% url 'rpg_miniboss_lobby' row.lobby.id %}"
+                     class="btn btn-outline-secondary btn-sm">
+                    Ver lobby
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="mb-0 text-muted">No hay lobbies en espera. ¡Crea uno y enfréntate a un minijefe!</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

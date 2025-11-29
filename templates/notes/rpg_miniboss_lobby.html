@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="fw-bold mb-3">Minijefe — Lobby #{{ lobby.id }}</h2>
+
+<div class="row g-3 mb-3">
+  <!-- Info del jefe -->
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">
+          {% if boss %}{{ boss.name }}{% else %}Jefe desconocido{% endif %}
+        </h5>
+        {% if boss %}
+          <p class="mb-1">Daño por turno: <strong>{{ boss.damage_per_turn }}</strong></p>
+          <p class="mb-1">
+            Recompensa: <strong>1 moneda</strong> por cada <strong>100 daño</strong>
+          </p>
+          <p class="mb-1">Máximo por jugador: <strong>{{ boss.max_reward }} monedas</strong></p>
+        {% endif %}
+        <hr>
+        <p class="mb-1">Estado: <strong>{{ lobby.get_status_display }}</strong></p>
+        <p class="mb-1">Creador: <strong>{{ lobby.creator.username }}</strong></p>
+        <p class="mb-0">Daño total al jefe: <strong>{{ lobby.total_damage }}</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Acciones y resumen -->
+  <div class="col-md-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column justify-content-between">
+        <div>
+          <h5 class="fw-bold mb-2">Acciones</h5>
+
+          <p class="mb-2">
+            Participaciones usadas hoy: <strong>{{ remaining|add:"3"|add:"-"|add:remaining }}/3</strong>
+            <!-- truco feo; si quieres lo ajustamos luego para mostrar today_count -->
+          </p>
+
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="refresh">
+              <button class="btn btn-outline-secondary rounded-pill">
+                🔄 Actualizar
+              </button>
+            </form>
+
+            {% if not is_participant and lobby.status == "waiting" and remaining > 0 %}
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="join">
+                <button class="btn btn-success rounded-pill">
+                  ✅ Unirse al lobby
+                </button>
+              </form>
+            {% endif %}
+
+            {% if is_creator and lobby.status == "waiting" %}
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="start">
+                <button class="btn btn-danger rounded-pill">
+                  🚀 Iniciar batalla
+                </button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if hero and lobby.status == "finished" %}
+          <hr class="my-3">
+          <div class="alert alert-warning mb-0">
+            <strong>Jugador heroico:</strong> {{ hero.user.username }} — 
+            daño total: <strong>{{ hero.total_damage_done }}</strong>.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Participantes -->
+<h4 class="fw-bold mb-2">Participantes</h4>
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    {% if participants %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Jugador</th>
+              <th>HP restante</th>
+              <th>Daño total</th>
+              <th>Estado</th>
+              <th>Recompensa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in participants %}
+              <tr>
+                <td>{{ p.user.username }}</td>
+                <td>{{ p.hp_remaining }}</td>
+                <td>{{ p.total_damage_done }}</td>
+                <td>
+                  {% if p.is_alive %}
+                    <span class="badge bg-success">Vivo</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Derrotado</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if lobby.status == "finished" %}
+                    {{ p.reward_coins }} 🪙
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="mb-0 text-muted">No hay participantes todavía.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Log de batalla -->
+<h4 class="fw-bold mb-2">Registro de la batalla</h4>
+<div class="card shadow-sm">
+  <div class="card-body" style="max-height: 320px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.9rem;">
+    {% if lobby.log_text %}
+      {{ lobby.log_text }}
+    {% else %}
+      Aún no hay eventos registrados.
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

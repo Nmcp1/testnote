@@ -36,6 +36,9 @@ from .models import (
     Trade,
     WorldBossCycle,
     WorldBossParticipant,
+    MiniBossParticipant,
+    MiniBossLobby
+
 )
 from .forms import (
     NoteForm,
@@ -2276,3 +2279,340 @@ def rpg_world_boss(request):
         "now": now_local,
     }
     return render(request, "notes/rpg_world_boss.html", context)
+
+
+# ============================================================
+#  MINI BOSS — Definiciones
+# ============================================================
+
+MINI_BOSS_DEFINITIONS = {
+    "moth_baron": {
+        "code": "moth_baron",
+        "name": "Varón Polilla",
+        "damage_per_turn": 30,
+        "reward_per_100": 5,   # 1 moneda por cada 100 de daño
+        "max_reward": 40,      # máximo 40 monedas
+    },
+    "cat_commander": {
+        "code": "cat_commander",
+        "name": "Comandante Gato",
+        "damage_per_turn": 50,
+        "reward_per_100": 5,
+        "max_reward": 60,
+    },
+    "nightmare_freddy": {
+        "code": "nightmare_freddy",
+        "name": "Pesadilla Freddy",
+        "damage_per_turn": 100,
+        "reward_per_100": 5,
+        "max_reward": 100,
+    },
+}
+
+
+def get_miniboss_def(boss_code):
+    return MINI_BOSS_DEFINITIONS.get(boss_code)
+
+
+def get_user_miniboss_daily_count(user):
+    """
+    Cuenta cuántas veces ha participado un usuario hoy
+    (en cualquier minijefe).
+    """
+    today = date.today()
+    return MiniBossParticipant.objects.filter(
+        user=user,
+        lobby__created_at__date=today,
+    ).values("lobby").distinct().count()
+
+
+def _apply_miniboss_rewards(lobby, participants_qs):
+    """
+    Calcula y entrega recompensas según el daño hecho al minijefe,
+    respetando el máximo por jefe.
+    Se llama cuando el lobby pasa a estado FINISHED.
+    """
+    boss_def = get_miniboss_def(lobby.boss_code)
+    if not boss_def:
+        return
+
+    reward_per_100 = boss_def["reward_per_100"]
+    max_reward = boss_def["max_reward"]
+
+    for p in participants_qs:
+        if p.reward_given:
+            continue
+
+        # monedas = floor(daño / 100) * reward_per_100, cap max_reward
+        coins = (p.total_damage_done // 100) * reward_per_100
+        if coins > max_reward:
+            coins = max_reward
+
+        if coins > 0:
+            profile = get_or_create_profile(p.user)
+            profile.coins += coins
+            profile.save()
+
+        p.reward_coins = coins
+        p.reward_given = True
+        p.save()
+
+
+def _advance_miniboss_battle(lobby: MiniBossLobby):
+    """
+    Avanza la batalla del minijefe según el tiempo transcurrido.
+    - 1 turno cada 30 segundos desde started_at.
+    - El jefe hace daño fijo a todos los jugadores vivos.
+    - Los jugadores hacen daño basado en su ataque total.
+    - La batalla termina cuando todos los jugadores están derrotados.
+    """
+    if lobby.status != MiniBossLobby.STATUS_RUNNING or not lobby.started_at:
+        return
+
+    boss_def = get_miniboss_def(lobby.boss_code)
+    if not boss_def:
+        return
+
+    now = timezone.now()
+    elapsed = (now - lobby.started_at).total_seconds()
+
+    turns_should_have = int(elapsed // 30)
+    if turns_should_have <= lobby.current_turn:
+        # Ya estamos al día
+        return
+
+    participants = list(
+        MiniBossParticipant.objects
+        .filter(lobby=lobby)
+        .select_related("user")
+    )
+
+    # Filtrar vivos
+    alive = [p for p in participants if p.is_alive and p.hp_remaining > 0]
+
+    log_lines = []
+    if lobby.log_text:
+        log_lines = lobby.log_text.splitlines()
+
+    damage_per_turn = boss_def["damage_per_turn"]
+
+    # Avanzamos turno a turno hasta alcanzar turns_should_have o que no queden vivos
+    while lobby.current_turn < turns_should_have and alive:
+        lobby.current_turn += 1
+        turn_num = lobby.current_turn
+        log_lines.append(f"Turno {turn_num}")
+
+        # 1) Jugadores atacan
+        turn_total_damage = 0
+        for p in alive:
+            stats = get_total_stats(p.user)
+            dmg = max(1, stats["attack"])
+            p.total_damage_done += dmg
+            turn_total_damage += dmg
+
+        lobby.total_damage += turn_total_damage
+        log_lines.append(f"- Los jugadores infligen {turn_total_damage} de daño al jefe.")
+
+        # 2) Jefe contraataca
+        if alive:
+            log_lines.append(f"- El jefe contraataca con {damage_per_turn} de daño a cada jugador.")
+            for p in alive:
+                p.hp_remaining -= damage_per_turn
+                if p.hp_remaining <= 0:
+                    p.hp_remaining = 0
+                    p.is_alive = False
+
+        # Actualizar lista de vivos
+        alive = [p for p in alive if p.is_alive and p.hp_remaining > 0]
+
+        if not alive:
+            log_lines.append("- Todos los jugadores han sido derrotados.")
+        log_lines.append("")
+
+    # Guardar participantes
+    for p in participants:
+        p.save()
+
+    # Si ya no quedan vivos, terminamos la batalla
+    if not any(p.is_alive and p.hp_remaining > 0 for p in participants):
+        lobby.status = MiniBossLobby.STATUS_FINISHED
+        lobby.ended_at = timezone.now()
+        _apply_miniboss_rewards(lobby, participants)
+
+    lobby.log_text = "\n".join(log_lines)
+    lobby.save()
+
+@login_required
+def rpg_miniboss_hub(request):
+    """
+    Pantalla principal para minijefes:
+    - Muestra los 3 jefes disponibles.
+    - Muestra lobbies en espera.
+    - Permite crear un lobby nuevo (respetando máximo 3 participaciones diarias).
+    """
+    profile = get_or_create_profile(request.user)
+
+    today_count = get_user_miniboss_daily_count(request.user)
+    remaining = max(0, 3 - today_count)
+
+    # Crear lobby
+    if request.method == "POST":
+        boss_code = request.POST.get("boss_code")
+        boss_def = get_miniboss_def(boss_code)
+
+        if not boss_def:
+            messages.error(request, "Jefe inválido.")
+            return redirect("rpg_miniboss_hub")
+
+        if remaining <= 0:
+            messages.error(request, "Ya has participado en el máximo de 3 minijefes hoy.")
+            return redirect("rpg_miniboss_hub")
+
+        # Crear lobby
+        lobby = MiniBossLobby.objects.create(
+            creator=request.user,
+            boss_code=boss_code,
+        )
+
+        # Crear participante para el creador
+        stats = get_total_stats(request.user)
+        MiniBossParticipant.objects.create(
+            lobby=lobby,
+            user=request.user,
+            hp_remaining=stats["hp"],
+        )
+
+        messages.success(
+            request,
+            f"Has creado un lobby contra {boss_def['name']}."
+        )
+        return redirect("rpg_miniboss_lobby", lobby_id=lobby.id)
+
+    # Listar lobbies en espera
+    waiting_lobbies = (
+        MiniBossLobby.objects
+        .filter(status=MiniBossLobby.STATUS_WAITING)
+        .select_related("creator")
+        .order_by("-created_at")[:20]
+    )
+
+    lobby_rows = []
+    for lb in waiting_lobbies:
+        boss_def = get_miniboss_def(lb.boss_code)
+        lobby_rows.append({
+            "lobby": lb,
+            "boss_name": boss_def["name"] if boss_def else lb.get_boss_code_display(),
+        })
+
+    bosses_list = []
+    for code, cfg in MINI_BOSS_DEFINITIONS.items():
+        bosses_list.append(cfg)
+
+    context = {
+        "profile": profile,
+        "remaining": remaining,
+        "today_count": today_count,
+        "bosses": bosses_list,
+        "waiting_lobbies": lobby_rows,
+    }
+    return render(request, "notes/rpg_miniboss_hub.html", context)
+
+@login_required
+def rpg_miniboss_lobby(request, lobby_id):
+    """
+    Vista del lobby de un minijefe:
+    - Muestra participantes, jefe, estado y log.
+    - Permite unirse (si hay cupo diario).
+    - Solo el creador puede iniciar la batalla.
+    - Hay un botón de "Actualizar" que recarga la vista.
+    """
+    lobby = get_object_or_404(MiniBossLobby, pk=lobby_id)
+    boss_def = get_miniboss_def(lobby.boss_code)
+    profile = get_or_create_profile(request.user)
+
+    # Avanzar la batalla si está en curso
+    if lobby.status == MiniBossLobby.STATUS_RUNNING:
+        _advance_miniboss_battle(lobby)
+        lobby.refresh_from_db()
+
+    participants = list(
+        MiniBossParticipant.objects
+        .filter(lobby=lobby)
+        .select_related("user")
+    )
+
+    is_participant = any(p.user_id == request.user.id for p in participants)
+    is_creator = (lobby.creator_id == request.user.id)
+
+    today_count = get_user_miniboss_daily_count(request.user)
+    remaining = max(0, 3 - today_count)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "join":
+            if is_participant:
+                messages.info(request, "Ya estás en este lobby.")
+            elif lobby.status != MiniBossLobby.STATUS_WAITING:
+                messages.error(request, "Solo se puede entrar a lobbies en espera.")
+            elif remaining <= 0:
+                messages.error(request, "Ya has participado en el máximo de 3 minijefes hoy.")
+            else:
+                stats = get_total_stats(request.user)
+                MiniBossParticipant.objects.create(
+                    lobby=lobby,
+                    user=request.user,
+                    hp_remaining=stats["hp"],
+                )
+                messages.success(request, "Te has unido al lobby.")
+            return redirect("rpg_miniboss_lobby", lobby_id=lobby.id)
+
+        elif action == "start":
+            if not is_creator:
+                messages.error(request, "Solo el creador puede iniciar la batalla.")
+            elif lobby.status != MiniBossLobby.STATUS_WAITING:
+                messages.error(request, "La batalla ya ha comenzado o ha terminado.")
+            else:
+                if not participants:
+                    messages.error(request, "No hay participantes en el lobby.")
+                else:
+                    lobby.status = MiniBossLobby.STATUS_RUNNING
+                    lobby.started_at = timezone.now()
+                    lobby.current_turn = 0
+                    text = lobby.log_text or ""
+                    if boss_def:
+                        text += f"Comienza la batalla contra {boss_def['name']}.\n\n"
+                    lobby.log_text = text
+                    lobby.save()
+                    messages.success(request, "¡La batalla ha comenzado!")
+            return redirect("rpg_miniboss_lobby", lobby_id=lobby.id)
+
+        elif action == "refresh":
+            # Solo recarga
+            return redirect("rpg_miniboss_lobby", lobby_id=lobby.id)
+
+    # Recargar participantes por si algo cambió
+    participants = list(
+        MiniBossParticipant.objects
+        .filter(lobby=lobby)
+        .select_related("user")
+    )
+
+    hero = None
+    if lobby.status == MiniBossLobby.STATUS_FINISHED and participants:
+        hero = sorted(
+            participants,
+            key=lambda p: p.total_damage_done,
+            reverse=True,
+        )[0]
+
+    context = {
+        "lobby": lobby,
+        "boss": boss_def,
+        "participants": participants,
+        "is_participant": is_participant,
+        "is_creator": is_creator,
+        "remaining": remaining,
+        "hero": hero,
+    }
+    return render(request, "notes/rpg_miniboss_lobby.html", context)
