@@ -2328,9 +2328,11 @@ def get_user_miniboss_daily_count(user):
 
 def _apply_miniboss_rewards(lobby, participants_qs):
     """
-    Calcula y entrega recompensas según el daño hecho al minijefe,
-    respetando el máximo por jefe.
-    Se llama cuando el lobby pasa a estado FINISHED.
+    Calcula y entrega recompensas SEGÚN EL DAÑO TOTAL GLOBAL
+    que llevaba el jefe en el momento en que murió el jugador.
+
+    Ejemplo: si el jugador muere cuando lobby.total_damage era 1100,
+    se usan esos 1100 para el cálculo de monedas.
     """
     boss_def = get_miniboss_def(lobby.boss_code)
     if not boss_def:
@@ -2343,8 +2345,12 @@ def _apply_miniboss_rewards(lobby, participants_qs):
         if p.reward_given:
             continue
 
-        # monedas = floor(daño / 100) * reward_per_100, cap max_reward
-        coins = (p.total_damage_done // 100) * reward_per_100
+        # Si nunca se seteó durante la batalla (por seguridad),
+        # usamos el total de daño final del lobby
+        effective_damage = p.boss_damage_at_death or lobby.total_damage
+
+        # monedas = floor(effective_damage / 100) * reward_per_100, cap max_reward
+        coins = (effective_damage // 100) * reward_per_100
         if coins > max_reward:
             coins = max_reward
 
@@ -2365,6 +2371,9 @@ def _advance_miniboss_battle(lobby: MiniBossLobby):
     - El jefe hace daño fijo a todos los jugadores vivos.
     - Los jugadores hacen daño basado en su ataque total.
     - La batalla termina cuando todos los jugadores están derrotados.
+
+    AHORA: cada participante guarda lobby.total_damage en boss_damage_at_death
+    en el turno en que muere, para usarlo como base de recompensa.
     """
     if lobby.status != MiniBossLobby.STATUS_RUNNING or not lobby.started_at:
         return
@@ -2376,6 +2385,7 @@ def _advance_miniboss_battle(lobby: MiniBossLobby):
     now = timezone.now()
     elapsed = (now - lobby.started_at).total_seconds()
 
+    # Si quieres 30 segundos por turno cambia 10 -> 30
     turns_should_have = int(elapsed // 10)
     if turns_should_have <= lobby.current_turn:
         # Ya estamos al día
@@ -2417,10 +2427,15 @@ def _advance_miniboss_battle(lobby: MiniBossLobby):
         if alive:
             log_lines.append(f"- El jefe contraataca con {damage_per_turn} de daño a cada jugador.")
             for p in alive:
+                if not p.is_alive or p.hp_remaining <= 0:
+                    continue
                 p.hp_remaining -= damage_per_turn
                 if p.hp_remaining <= 0:
                     p.hp_remaining = 0
                     p.is_alive = False
+                    # 🔥 Guardamos el daño global del jefe en el momento de la muerte
+                    if p.boss_damage_at_death == 0:
+                        p.boss_damage_at_death = lobby.total_damage
 
         # Actualizar lista de vivos
         alive = [p for p in alive if p.is_alive and p.hp_remaining > 0]
@@ -2431,6 +2446,10 @@ def _advance_miniboss_battle(lobby: MiniBossLobby):
 
     # Guardar participantes
     for p in participants:
+        # Por seguridad: si alguien nunca quedó con boss_damage_at_death,
+        # le dejamos el total final
+        if p.boss_damage_at_death == 0 and (not p.is_alive or p.hp_remaining <= 0):
+            p.boss_damage_at_death = lobby.total_damage
         p.save()
 
     # Si ya no quedan vivos, terminamos la batalla
@@ -2441,6 +2460,7 @@ def _advance_miniboss_battle(lobby: MiniBossLobby):
 
     lobby.log_text = "\n".join(log_lines)
     lobby.save()
+
 
 @login_required
 def rpg_miniboss_hub(request):

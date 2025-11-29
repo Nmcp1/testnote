@@ -473,90 +473,54 @@ class WorldBossParticipant(models.Model):
 
 from django.utils import timezone
 
+# models.py (solo la parte relevante)
+
+from django.db import models
+from django.contrib.auth.models import User
+
+
 class MiniBossLobby(models.Model):
-    """
-    Lobby de minijefe. Varios jugadores pueden unirse, el creador
-    puede iniciar la batalla. La batalla avanza 1 turno cada 30 segundos.
-    """
-
-    BOSS_MOTH = "moth_baron"
-    BOSS_CAT = "cat_commander"
-    BOSS_FREDDY = "nightmare_freddy"
-
-    BOSS_CHOICES = [
-        (BOSS_MOTH, "Varón Polilla"),
-        (BOSS_CAT, "Comandante Gato"),
-        (BOSS_FREDDY, "Pesadilla Freddy"),
-    ]
-
     STATUS_WAITING = "waiting"
     STATUS_RUNNING = "running"
     STATUS_FINISHED = "finished"
-
     STATUS_CHOICES = [
         (STATUS_WAITING, "En espera"),
         (STATUS_RUNNING, "En batalla"),
-        (STATUS_FINISHED, "Finalizada"),
+        (STATUS_FINISHED, "Finalizado"),
     ]
 
-    creator = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="miniboss_lobbies_created",
-    )
-    boss_code = models.CharField(max_length=32, choices=BOSS_CHOICES)
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="miniboss_lobbies")
+    boss_code = models.CharField(max_length=50)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_WAITING)
+
     created_at = models.DateTimeField(auto_now_add=True)
-
-    status = models.CharField(
-        max_length=16,
-        choices=STATUS_CHOICES,
-        default=STATUS_WAITING,
-    )
-
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
 
-    # Turnos y daño total al jefe
     current_turn = models.IntegerField(default=0)
     total_damage = models.IntegerField(default=0)
-
-    # Log de la batalla (texto)
-    log_text = models.TextField(blank=True)
+    log_text = models.TextField(blank=True, default="")
 
     def __str__(self):
-        return f"MiniBossLobby #{self.id} - {self.get_boss_code_display()} ({self.get_status_display()})"
+        return f"Lobby #{self.id} - {self.boss_code} ({self.status})"
 
 
 class MiniBossParticipant(models.Model):
-    """
-    Jugador dentro de un lobby de minijefe.
-    Se guarda su vida restante, daño total e información de recompensa.
-    """
+    lobby = models.ForeignKey(MiniBossLobby, on_delete=models.CASCADE, related_name="participants")
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
-    lobby = models.ForeignKey(
-        MiniBossLobby,
-        on_delete=models.CASCADE,
-        related_name="participants",
-    )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="miniboss_participations",
-    )
-    joined_at = models.DateTimeField(auto_now_add=True)
-
-    # Vida que le queda en este combate
     hp_remaining = models.IntegerField(default=0)
-
-    # Daño total que le ha hecho al jefe
-    total_damage_done = models.IntegerField(default=0)
-
-    # Estado
     is_alive = models.BooleanField(default=True)
 
-    # Recompensa en monedas (calculada al final)
-    reward_coins = models.IntegerField(default=0)
+    # daño que ESTE jugador hizo (lo seguimos guardando por si lo quieres usar luego)
+    total_damage_done = models.IntegerField(default=0)
+
+    # NUEVO: daño total global del jefe en el momento en que este jugador murió
+    # (si nunca se setea durante la batalla, podemos asumir lobby.total_damage al final)
+    boss_damage_at_death = models.IntegerField(default=0)
+
     reward_given = models.BooleanField(default=False)
+    reward_coins = models.IntegerField(default=0)
 
     def __str__(self):
-        return f"{self.user.username} en lobby {self.lobby_id} (DMG {self.total_damage_done})"
+        return f"{self.user.username} en lobby {self.lobby_id}"
