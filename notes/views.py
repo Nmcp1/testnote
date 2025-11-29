@@ -2376,7 +2376,7 @@ def _advance_miniboss_battle(lobby: MiniBossLobby):
     now = timezone.now()
     elapsed = (now - lobby.started_at).total_seconds()
 
-    turns_should_have = int(elapsed // 30)
+    turns_should_have = int(elapsed // 10)
     if turns_should_have <= lobby.current_turn:
         # Ya estamos al día
         return
