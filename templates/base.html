@@ -101,13 +101,7 @@
                         <!-- RPG PvE / Economía -->
                         <li>
                             <a class="dropdown-item" href="{% url 'rpg_hub' %}">
-                                🗡️ RPG — HUB
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_tower' %}">
-                                🗼 Torre PvE
+                                🗡️ RPG — Torre
                             </a>
                         </li>
 
@@ -197,10 +191,17 @@
                         </a>
                     </li>
 
-                    <!-- Monedas -->
+                    <!-- Monedas normales -->
                     <li class="nav-item d-flex align-items-center mx-2">
                         <span class="text-warning fw-bold">
                             🪙 {{ user_coins|default:"0" }}
+                        </span>
+                    </li>
+
+                    <!-- Rubíes premium -->
+                    <li class="nav-item d-flex align-items-center mx-2">
+                        <span class="fw-bold" style="color:#ff4dd2;">
+                            💎 {{ user_rubies|default:"0" }}
                         </span>
                     </li>
 

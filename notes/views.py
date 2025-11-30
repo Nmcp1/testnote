@@ -960,57 +960,115 @@ def rpg_gacha(request):
     profile = get_or_create_profile(request.user)
     rolled_item = None
     rolled_rarity = None
+    auto_sold = False
+    auto_sell_gain = 0
 
-    # Último slot seleccionado (por defecto: arma)
-    selected_slot = request.session.get(GACHA_LAST_SLOT_SESSION_KEY, "weapon")
+    # Último slot usado en el gacha (para que no se reseteé al refrescar)
+    last_slot = request.session.get("rpg_gacha_last_slot", ItemSlot.WEAPON.value)
+
+    # --- Preferencias de auto vender del usuario ---
+    auto_sell_set = set()
+    if profile.auto_sell_rarities:
+        auto_sell_set = set(
+            r for r in profile.auto_sell_rarities.split(",") if r.strip()
+        )
+
+    # Valores de venta por rareza (mismo sistema que el inventario)
+    SELL_VALUES = {
+        ItemRarity.BASIC: 2,
+        ItemRarity.UNCOMMON: 20,
+        ItemRarity.SPECIAL: 50,
+        ItemRarity.EPIC: 100,
+        ItemRarity.LEGENDARY: 300,
+        ItemRarity.MYTHIC: 500,
+        ItemRarity.ASCENDED: 1000,
+    }
 
     if request.method == "POST":
-        slot_code = request.POST.get("slot", selected_slot)
+        action = request.POST.get("action", "roll")
 
-        try:
-            slot = ItemSlot(slot_code)
-        except ValueError:
-            messages.error(request, "Slot inválido.")
+        # ----------------------------------------
+        # 1) Actualizar configuración de AUTO VENDER
+        # ----------------------------------------
+        if action == "config_autosell":
+            selected = request.POST.getlist("auto_sell")
+            # Guardamos los códigos de rareza como 'basic,uncommon,...'
+            profile.auto_sell_rarities = ",".join(selected)
+            profile.save()
+            messages.success(request, "Preferencias de auto vender actualizadas.")
             return redirect("rpg_gacha")
 
-        # Guardamos el último slot usado en la sesión
-        request.session[GACHA_LAST_SLOT_SESSION_KEY] = slot.value
-        selected_slot = slot.value
+        # ----------------------------------------
+        # 2) Tirada de GACHA normal
+        # ----------------------------------------
+        elif action == "roll":
+            slot_code = request.POST.get("slot", last_slot)
+            try:
+                slot = ItemSlot(slot_code)
+            except ValueError:
+                messages.error(request, "Slot inválido.")
+                return redirect("rpg_gacha")
 
-        COST = 15
-        if profile.coins < COST:
-            messages.error(request, "No tienes suficientes monedas.")
-            return redirect("rpg_gacha")
+            # Guardar en sesión el último slot seleccionado
+            request.session["rpg_gacha_last_slot"] = slot.value
+            last_slot = slot.value
 
-        rarity = roll_rarity()
-        stats = generate_item_stats(slot, rarity, from_gacha=True)
-        name = f"{SLOT_LABELS[slot]} {ItemRarity(rarity).label}"
+            COST = 15
+            if profile.coins < COST:
+                messages.error(request, "No tienes suficientes monedas.")
+                return redirect("rpg_gacha")
 
-        item = CombatItem.objects.create(
-            owner=request.user,
-            name=name,
-            slot=slot,
-            rarity=rarity,
-            source=ItemSource.GACHA,
-            attack=stats["attack"],
-            defense=stats["defense"],
-            hp=stats["hp"],
-            crit_chance=stats["crit_chance"],
-            dodge_chance=stats["dodge_chance"],
-            speed=stats["speed"],
-        )
+            # Determinar rareza según las probabilidades configuradas
+            rarity = roll_rarity()
+            stats = generate_item_stats(slot, rarity, from_gacha=True)
+            name = f"{SLOT_LABELS[slot]} {ItemRarity(rarity).label}"
 
-        profile.coins -= COST
-        profile.save()
+            # Crear el ítem
+            item = CombatItem.objects.create(
+                owner=request.user,
+                name=name,
+                slot=slot,
+                rarity=rarity,
+                source=ItemSource.GACHA,
+                attack=stats["attack"],
+                defense=stats["defense"],
+                hp=stats["hp"],
+                crit_chance=stats["crit_chance"],
+                dodge_chance=stats["dodge_chance"],
+                speed=stats["speed"],
+            )
 
-        rolled_item = item
-        rolled_rarity = rarity
+            # Cobrar coste del gacha
+            profile.coins -= COST
+            profile.save()
 
-        messages.success(
-            request,
-            f"¡Has obtenido {item.name}! ATK {item.attack}, DEF {item.defense}, HP {item.hp}."
-        )
+            # ¿Debe auto venderse según preferencias del usuario?
+            if rarity in auto_sell_set:
+                # Pasamos de código de rareza (string) a enum
+                rarity_enum = ItemRarity(rarity)
+                sell_price = SELL_VALUES.get(rarity_enum, 0)
 
+                if sell_price > 0:
+                    profile.coins += sell_price
+                    profile.save()
+
+                auto_sold = True
+                auto_sell_gain = sell_price
+
+                # Eliminamos el ítem del inventario
+                item.delete()
+
+
+                # No mostramos detalle del ítem porque ya no existe
+                rolled_item = None
+                rolled_rarity = rarity
+            else:
+                # Ítem se conserva normalmente
+                rolled_item = item
+                rolled_rarity = rarity
+
+
+    # Tabla de probabilidades para mostrar en la UI
     probs = get_gacha_probs()
     probabilities = [
         {
@@ -1026,7 +1084,10 @@ def rpg_gacha(request):
         "rolled_item": rolled_item,
         "rolled_rarity": rolled_rarity,
         "probabilities": probabilities,
-        "selected_slot": selected_slot,
+        "last_slot": last_slot,
+        "auto_sold": auto_sold,
+        "auto_sell_gain": auto_sell_gain,
+        "auto_sell_selected": auto_sell_set,
     }
     return render(request, "notes/rpg_gacha.html", context)
 

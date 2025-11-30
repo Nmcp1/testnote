@@ -118,8 +118,11 @@ class UserProfile(models.Model):
         User, on_delete=models.CASCADE, related_name="profile"
     )
     coins = models.PositiveIntegerField(default=0)
+    rubies = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    auto_sell_rarities = models.CharField(max_length=200, blank=True, default="")
 
     # Equipamiento actual
     equipped_weapon = models.ForeignKey(

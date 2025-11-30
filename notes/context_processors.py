@@ -27,4 +27,5 @@ def notifications_context(request):
         "unread_notifications_count": unread_count,
         "is_moderator": is_moderator,
         "user_coins": user_coins,
+        "user_rubies": profile.rubies, 
     }

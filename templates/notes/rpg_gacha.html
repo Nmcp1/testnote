@@ -1,97 +1,179 @@
 {% extends "base.html" %}
+{% load static %}
 {% block content %}
 
-<h2 class="fw-bold mb-3">RPG — Gacha ⭐</h2>
+<div class="card shadow-sm mx-auto" style="max-width: 1100px;">
+  <div class="card-body py-3">
 
-<div class="d-flex flex-wrap gap-2 mb-3">
-  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
-    ← Volver al hub
-  </a>
-</div>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h4 class="fw-bold mb-0">⭐ Gacha de Equipamiento</h4>
+      <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
+        ⬅ Volver al Hub RPG
+      </a>
+    </div>
 
-<div class="row g-3">
-  <!-- Columna izquierda: Gacha -->
-  <div class="col-lg-6">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="fw-bold mb-3">Tirar Gacha</h5>
+    <div class="row g-3">
 
-        <p class="mb-2" style="font-size: 0.9rem;">
-          Monedas actuales: <strong>{{ profile.coins }}</strong>
-        </p>
-        <p class="mb-3 text-muted" style="font-size: 0.85rem;">
-          Cada tirada cuesta <strong>15 monedas</strong>.
-        </p>
+      <!-- COLUMNA IZQUIERDA -->
+      <div class="col-lg-6">
 
-        <form method="post" class="mb-3">
-          {% csrf_token %}
-          <div class="mb-3">
-            <label for="slot" class="form-label">Tipo de equipamiento:</label>
-            <select name="slot" id="slot" class="form-select">
-              <option value="weapon" {% if selected_slot == "weapon" %}selected{% endif %}>Arma</option>
-              <option value="helmet" {% if selected_slot == "helmet" %}selected{% endif %}>Casco</option>
-              <option value="armor" {% if selected_slot == "armor" %}selected{% endif %}>Armadura</option>
-              <option value="pants" {% if selected_slot == "pants" %}selected{% endif %}>Pantalones</option>
-              <option value="boots" {% if selected_slot == "boots" %}selected{% endif %}>Botas</option>
-              <option value="shield" {% if selected_slot == "shield" %}selected{% endif %}>Escudo</option>
-              <option value="amulet" {% if selected_slot == "amulet" %}selected{% endif %}>Amuleto</option>
-            </select>
+        <!-- Perfil -->
+        <div class="card mb-2">
+          <div class="card-body py-2">
+            <div class="d-flex justify-content-between small mb-1">
+              <span><strong>Usuario:</strong> {{ request.user.username }}</span>
+              <span><strong>Monedas:</strong> {{ profile.coins }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tirar gacha -->
+        <div class="card mb-2">
+          <div class="card-body py-2">
+            <h6 class="fw-bold mb-2">Tirar gacha</h6>
+
+            <form method="post" class="row g-2 align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="roll">
+
+              <div class="col-8">
+                <label class="form-label mb-1 small">Tipo de equipamiento</label>
+                <select name="slot" class="form-select form-select-sm">
+                  <option value="weapon"   {% if last_slot == 'weapon' %}selected{% endif %}>Espada</option>
+                  <option value="helmet"   {% if last_slot == 'helmet' %}selected{% endif %}>Casco</option>
+                  <option value="armor"    {% if last_slot == 'armor' %}selected{% endif %}>Armadura</option>
+                  <option value="pants"    {% if last_slot == 'pants' %}selected{% endif %}>Pantalones</option>
+                  <option value="boots"    {% if last_slot == 'boots' %}selected{% endif %}>Botas</option>
+                  <option value="shield"   {% if last_slot == 'shield' %}selected{% endif %}>Escudo</option>
+                  <option value="amulet"   {% if last_slot == 'amulet' %}selected{% endif %}>Amuleto</option>
+                </select>
+              </div>
+
+              <div class="col-4 text-end">
+                <button class="btn btn-primary w-100 btn-sm">
+                  🎲 Tirar (15 🪙)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Resultado -->
+        {% if rolled_item or rolled_rarity %}
+        <div class="card border-primary">
+          <div class="card-body py-2">
+            <h6 class="fw-bold mb-2">Resultado</h6>
+
+            {% if auto_sold %}
+              <p class="mb-1 small">
+                Obtuviste un objeto de rareza
+                <strong>
+                  {% for row in probabilities %}
+                    {% if row.code == rolled_rarity %}
+                      {{ row.label }}
+                    {% endif %}
+                  {% endfor %}
+                </strong>,
+                pero estaba marcada para <span class="text-danger fw-bold">auto vender</span>.
+              </p>
+              <p class="mb-0 small">
+                Ganaste <strong>{{ auto_sell_gain }}</strong> monedas.
+              </p>
+            {% else %}
+              <p class="mb-1 small">
+                Obtuviste: <strong>{{ rolled_item.name }}</strong>
+              </p>
+              <p class="mb-0 text-muted small">
+                ATK {{ rolled_item.attack }} · DEF {{ rolled_item.defense }} · HP {{ rolled_item.hp }}<br>
+                Crit {{ rolled_item.crit_chance }}% · Esquive {{ rolled_item.dodge_chance }}% · Velocidad {{ rolled_item.speed }}
+              </p>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+
+      <!-- COLUMNA DERECHA -->
+      <div class="col-lg-6">
+
+        <div class="row g-2">
+
+          <!-- Probabilidades (tabla pequeña) -->
+          <div class="col-12">
+            <div class="card h-100">
+              <div class="card-body py-2">
+                <h6 class="fw-bold mb-2">Probabilidades</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered text-center align-middle mb-0"
+                         style="font-size: 0.8rem;">
+                    <thead class="table-light">
+                      <tr>
+                        <th class="py-1">Rareza</th>
+                        <th class="py-1">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in probabilities %}
+                      <tr>
+                        <td class="py-1">{{ row.label }}</td>
+                        <td class="py-1">{{ row.percent|floatformat:4 }}%</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <button type="submit" class="btn btn-primary">
-            Tirar gacha
-          </button>
-        </form>
+          <!-- Auto vender -->
+          <div class="col-12">
+            <div class="card h-100">
+              <div class="card-body py-2">
+                <h6 class="fw-bold mb-2">Auto vender</h6>
+                <p class="text-muted small mb-2">
+                  Marca las rarezas que quieres vender automáticamente al obtenerlas.
+                </p>
 
-        {% if rolled_item %}
-          <hr>
-          <h6 class="fw-bold">Resultado de la última tirada</h6>
-          <p class="mb-1">
-            Obtuviste: <strong>{{ rolled_item.name }}</strong>
-          </p>
-          <p class="mb-1" style="font-size: 0.9rem;">
-            ATK {{ rolled_item.attack }} |
-            DEF {{ rolled_item.defense }} |
-            HP {{ rolled_item.hp }} |
-            CRIT {{ rolled_item.crit_chance }}% |
-            ESQ {{ rolled_item.dodge_chance }}% |
-            VEL {{ rolled_item.speed }}
-          </p>
-        {% endif %}
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="config_autosell">
+
+                  <div class="row g-1">
+                    {% for row in probabilities %}
+                    <div class="col-6">
+                      <div class="form-check small">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          name="auto_sell"
+                          value="{{ row.code }}"
+                          id="autosell_{{ row.code }}"
+                          {% if row.code in auto_sell_selected %}checked{% endif %}
+                        >
+                        <label class="form-check-label" for="autosell_{{ row.code }}">
+                          {{ row.label }}
+                        </label>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+
+                  <button class="btn btn-outline-danger btn-sm mt-2">
+                    Guardar auto vender
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
       </div>
-    </div>
-  </div>
 
-  <!-- Columna derecha: Probabilidades -->
-  <div class="col-lg-6">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="fw-bold mb-3">Probabilidades del Gacha</h5>
-
-        {% if probabilities %}
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>Rareza</th>
-                <th>Probabilidad</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in probabilities %}
-              <tr>
-                <td>{{ row.label }}</td>
-                <td>{{ row.percent|floatformat:4 }}%</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-          <p class="text-muted mb-0">
-            No hay probabilidades configuradas.
-          </p>
-        {% endif %}
-      </div>
     </div>
+
   </div>
 </div>
 
