@@ -1193,12 +1193,10 @@ def rpg_inventory(request):
 
     # Mostrar TODOS los ítems del jugador, excepto los que estén
     # actualmente listados en el mercado (is_active=True).
-    from django.db.models import Q
-
     items_qs = (
         CombatItem.objects
         .filter(owner=request.user)
-        .exclude(market_listing__is_active=True)  # <- clave
+        .exclude(market_listing__is_active=True)  # no mostrar si está en venta
         .order_by("-created_at")
     )
 
@@ -1208,7 +1206,7 @@ def rpg_inventory(request):
 
     items = items_qs
 
-    # IDs equipados (igual que antes)
+    # IDs equipados para marcar en la tabla
     equipped_ids = set()
     for field in [
         "equipped_weapon", "equipped_helmet", "equipped_armor",
@@ -1221,6 +1219,8 @@ def rpg_inventory(request):
 
     if request.method == "POST":
         action = request.POST.get("action")
+
+        # --- EQUIPAR ---
         if action == "equip":
             item_id = request.POST.get("item_id")
             item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
@@ -1244,19 +1244,89 @@ def rpg_inventory(request):
                 profile.equipped_shield = item
                 messages.success(request, f"Has equipado {item.name} como escudo.")
             elif item.slot == ItemSlot.AMULET:
-                if profile.equipped_amulet1 is None:
+                # ahora el slot se elige en el HTML (A1/A2/A3)
+                slot_choice = request.POST.get("amulet_slot", "1")
+                if slot_choice == "1":
                     profile.equipped_amulet1 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 1.")
-                elif profile.equipped_amulet2 is None:
+                elif slot_choice == "2":
                     profile.equipped_amulet2 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 2.")
-                elif profile.equipped_amulet3 is None:
+                else:
                     profile.equipped_amulet3 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 3.")
-                else:
-                    profile.equipped_amulet1 = item
-                    messages.success(request, f"Has reemplazado el Amuleto 1 con {item.name}.")
+
             profile.save()
+            return redirect("rpg_inventory")
+
+        # --- VENDER VARIOS ---
+        elif action == "sell_bulk":
+            ids = request.POST.getlist("selected_items")
+            if not ids:
+                messages.info(request, "No seleccionaste ningún objeto para vender.")
+                return redirect("rpg_inventory")
+
+            items_to_sell = (
+                CombatItem.objects
+                .filter(owner=request.user, id__in=ids)
+                .exclude(market_listing__is_active=True)
+            )
+
+            if not items_to_sell.exists():
+                messages.info(request, "Los objetos seleccionados no se pueden vender.")
+                return redirect("rpg_inventory")
+
+            # tabla de precios por rareza
+            rarity_prices = {
+                ItemRarity.BASIC: 2,
+                ItemRarity.UNCOMMON: 20,
+                ItemRarity.SPECIAL: 50,
+                ItemRarity.EPIC: 100,
+                ItemRarity.LEGENDARY: 300,
+                ItemRarity.MYTHIC: 500,
+                ItemRarity.ASCENDED: 1000,
+            }
+
+            total_coins = 0
+            sold_count = 0
+
+            for it in items_to_sell:
+                price = rarity_prices.get(it.rarity, 0)
+
+                # si está equipado en algún slot, lo des-equipamos
+                if profile.equipped_weapon_id == it.id:
+                    profile.equipped_weapon = None
+                if profile.equipped_helmet_id == it.id:
+                    profile.equipped_helmet = None
+                if profile.equipped_armor_id == it.id:
+                    profile.equipped_armor = None
+                if profile.equipped_pants_id == it.id:
+                    profile.equipped_pants = None
+                if profile.equipped_boots_id == it.id:
+                    profile.equipped_boots = None
+                if profile.equipped_shield_id == it.id:
+                    profile.equipped_shield = None
+                if profile.equipped_amulet1_id == it.id:
+                    profile.equipped_amulet1 = None
+                if profile.equipped_amulet2_id == it.id:
+                    profile.equipped_amulet2 = None
+                if profile.equipped_amulet3_id == it.id:
+                    profile.equipped_amulet3 = None
+
+                total_coins += price
+                sold_count += 1
+                it.delete()
+
+            if sold_count > 0:
+                profile.coins += total_coins
+                profile.save()
+                messages.success(
+                    request,
+                    f"Has vendido {sold_count} objeto(s) por {total_coins} monedas."
+                )
+            else:
+                messages.info(request, "No se vendió ningún objeto.")
+
             return redirect("rpg_inventory")
 
     # Recalcular stats y equipados para mostrar

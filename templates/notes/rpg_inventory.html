@@ -144,6 +144,7 @@
   <div class="col-lg-9">
     <div class="card shadow-sm">
       <div class="card-body">
+
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
           <h5 class="fw-bold mb-0">Objetos en tu inventario</h5>
 
@@ -168,9 +169,7 @@
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th style="width: 2rem;">
-                  <!-- checkbox cabecera (opcional en el futuro) -->
-                </th>
+                <th style="width: 2rem;"></th>
                 <th>Nombre</th>
                 <th>Tipo</th>
                 <th>Rareza</th>
@@ -183,13 +182,11 @@
             {% for item in items %}
               <tr>
                 <td>
-                  {# Solo permitir marcar para vender si NO está en un listing activo #}
-                  {% if not item.market_listing or not item.market_listing.is_active %}
-                    <input type="checkbox"
-                           form="bulk-sell-form"
-                           name="selected_items"
-                           value="{{ item.id }}">
-                  {% endif %}
+                  <!-- checkbox ligado al formulario de venta múltiple -->
+                  <input type="checkbox"
+                         form="bulk-sell-form"
+                         name="selected_items"
+                         value="{{ item.id }}">
                 </td>
                 <td>
                   <span class="rarity-{{ item.rarity }}">
@@ -221,39 +218,31 @@
                   VEL {{ item.speed }}
                 </td>
                 <td class="text-center">
-                  {% if item.market_listing and item.market_listing.is_active %}
-                    <span class="badge bg-info">En venta</span>
-                  {% elif item.id in equipped_ids %}
+                  {% if item.id in equipped_ids %}
                     <span class="badge bg-success">Equipado</span>
                   {% else %}
                     <span class="badge bg-secondary">En mochila</span>
                   {% endif %}
                 </td>
                 <td class="text-end">
+                  <!-- Formulario para equipar (independiente del de venta) -->
+                  <form method="post" class="d-inline-block">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="equip">
+                    <input type="hidden" name="item_id" value="{{ item.id }}">
 
-                  {% if item.market_listing and item.market_listing.is_active %}
-                    <span class="text-muted" style="font-size:0.8rem;">En el mercado</span>
-                  {% else %}
-                    <!-- Formulario para equipar -->
-                    <form method="post" class="d-inline-block">
-                      {% csrf_token %}
-                      <input type="hidden" name="action" value="equip">
-                      <input type="hidden" name="item_id" value="{{ item.id }}">
+                    {% if item.slot == "amulet" %}
+                      <select name="amulet_slot" class="form-select form-select-sm d-inline-block w-auto me-1">
+                        <option value="1">A1</option>
+                        <option value="2">A2</option>
+                        <option value="3">A3</option>
+                      </select>
+                    {% endif %}
 
-                      {% if item.slot == "amulet" %}
-                        <select name="amulet_slot" class="form-select form-select-sm d-inline-block w-auto me-1">
-                          <option value="1">A1</option>
-                          <option value="2">A2</option>
-                          <option value="3">A3</option>
-                        </select>
-                      {% endif %}
-
-                      <button type="submit" class="btn btn-sm btn-primary">
-                        Equipar
-                      </button>
-                    </form>
-                  {% endif %}
-
+                    <button type="submit" class="btn btn-sm btn-primary">
+                      Equipar
+                    </button>
+                  </form>
                 </td>
               </tr>
             {% endfor %}
@@ -261,7 +250,7 @@
           </table>
         </div>
 
-        <!-- Formulario de venta múltiple -->
+        <!-- Formulario de venta múltiple (separado, sin forms anidados) -->
         <form id="bulk-sell-form" method="post" class="mt-2">
           {% csrf_token %}
           <input type="hidden" name="action" value="sell_bulk">
