@@ -39,6 +39,7 @@ from .models import (
     MiniBossParticipant,
     MiniBossLobby,
     MarketListing,
+    VipShopOffer
 
 )
 from .forms import (
@@ -2856,3 +2857,226 @@ def rpg_market_buy(request, listing_id):
         return redirect("rpg_inventory")
 
     return redirect("rpg_market")
+
+@login_required
+def rpg_vip_shop(request):
+    """
+    Tienda VIP visible para todos los jugadores.
+    - Muestra ofertas activas creadas por el superusuario.
+    - Permite comprar objetos VIP o paquetes de rubíes.
+    """
+
+    profile = get_or_create_profile(request.user)
+
+    filter_type = request.GET.get("type", "all")
+
+    offers_qs = VipShopOffer.objects.filter(is_active=True).select_related("item", "created_by")
+
+    if filter_type == "items":
+        offers_qs = offers_qs.filter(offer_type=VipShopOffer.TYPE_ITEM)
+    elif filter_type == "rubies":
+        offers_qs = offers_qs.filter(offer_type=VipShopOffer.TYPE_RUBIES)
+
+    offers = offers_qs
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "buy":
+            offer_id = request.POST.get("offer_id")
+            offer = get_object_or_404(VipShopOffer, pk=offer_id, is_active=True)
+
+            if offer.created_by == request.user:
+                messages.error(request, "No puedes comprar tu propia oferta VIP.")
+                return redirect("rpg_vip_shop")
+
+            # Compra de un ítem
+            if offer.offer_type == VipShopOffer.TYPE_ITEM:
+                if not offer.item:
+                    messages.error(request, "Esta oferta ya no es válida.")
+                    return redirect("rpg_vip_shop")
+
+                cost_coins = offer.price_coins or 0
+                cost_rubies = offer.price_rubies or 0
+
+                if cost_coins > 0 and profile.coins < cost_coins:
+                    messages.error(request, "No tienes suficientes monedas.")
+                    return redirect("rpg_vip_shop")
+
+                if cost_rubies > 0 and profile.rubies < cost_rubies:
+                    messages.error(request, "No tienes suficientes rubíes.")
+                    return redirect("rpg_vip_shop")
+
+                # Cobrar
+                if cost_coins > 0:
+                    profile.coins -= cost_coins
+                if cost_rubies > 0:
+                    profile.rubies -= cost_rubies
+                profile.save()
+
+                # Transferir el ítem al comprador
+                item = offer.item
+                item.owner = request.user
+                item.save()
+
+                offer.is_active = False
+                offer.buyer = request.user
+                offer.save()
+
+                messages.success(
+                    request,
+                    f"Has comprado {item.name} en la tienda VIP."
+                )
+                return redirect("rpg_vip_shop")
+
+            # Compra de un paquete de rubíes
+            elif offer.offer_type == VipShopOffer.TYPE_RUBIES:
+                ruby_amount = offer.ruby_amount or 0
+                cost_coins = offer.price_coins or 0
+
+                if ruby_amount <= 0:
+                    messages.error(request, "Esta oferta de rubíes ya no es válida.")
+                    return redirect("rpg_vip_shop")
+
+                if profile.coins < cost_coins:
+                    messages.error(request, "No tienes suficientes monedas.")
+                    return redirect("rpg_vip_shop")
+
+                profile.coins -= cost_coins
+                profile.rubies += ruby_amount
+                profile.save()
+
+                offer.is_active = False
+                offer.buyer = request.user
+                offer.save()
+
+                messages.success(
+                    request,
+                    f"Has comprado {ruby_amount} rubí(es) en la tienda VIP."
+                )
+                return redirect("rpg_vip_shop")
+
+    context = {
+        "profile": profile,
+        "offers": offers,
+        "filter_type": filter_type,
+    }
+    return render(request, "notes/rpg_vip_shop.html", context)
+
+@login_required
+def rpg_vip_admin(request):
+    """
+    Panel VIP solo para superusuario:
+    - Crear ofertas de ítems VIP (se genera el ítem y se asocia a la oferta).
+    - Crear ofertas de paquetes de rubíes.
+    - Activar / desactivar ofertas.
+    """
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Solo el superusuario puede administrar la tienda VIP.")
+
+    profile = get_or_create_profile(request.user)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        # Crear oferta de ítem
+        if action == "create_item_offer":
+            slot_code = request.POST.get("slot")
+            rarity_code = request.POST.get("rarity")
+            name = request.POST.get("name", "").strip()
+            price_coins = int(request.POST.get("price_coins") or 0)
+            price_rubies = int(request.POST.get("price_rubies") or 0)
+
+            if not slot_code or not rarity_code:
+                messages.error(request, "Debes seleccionar tipo de equipamiento y rareza.")
+                return redirect("rpg_vip_admin")
+
+            try:
+                slot = ItemSlot(slot_code)
+            except ValueError:
+                messages.error(request, "Tipo de slot inválido.")
+                return redirect("rpg_vip_admin")
+
+            try:
+                rarity = ItemRarity(rarity_code)
+            except ValueError:
+                messages.error(request, "Rareza inválida.")
+                return redirect("rpg_vip_admin")
+
+            if price_coins <= 0 and price_rubies <= 0:
+                messages.error(request, "Debes definir al menos un precio (monedas o rubíes).")
+                return redirect("rpg_vip_admin")
+
+            # Nombre automático si no se especifica
+            if not name:
+                name = f"{SLOT_LABELS[slot]} {rarity.label} VIP"
+
+            # Generar stats fuertes (como gacha)
+            stats = generate_item_stats(slot, rarity, from_gacha=True)
+
+            item = CombatItem.objects.create(
+                owner=request.user,
+                name=name,
+                slot=slot,
+                rarity=rarity,
+                source=ItemSource.SHOP,
+                attack=stats["attack"],
+                defense=stats["defense"],
+                hp=stats["hp"],
+                crit_chance=stats["crit_chance"],
+                dodge_chance=stats["dodge_chance"],
+                speed=stats["speed"],
+            )
+
+            VipShopOffer.objects.create(
+                offer_type=VipShopOffer.TYPE_ITEM,
+                item=item,
+                ruby_amount=0,
+                price_coins=price_coins,
+                price_rubies=price_rubies,
+                created_by=request.user,
+            )
+
+            messages.success(request, f"Se ha creado una oferta VIP de {item.name}.")
+            return redirect("rpg_vip_admin")
+
+        # Crear oferta de rubíes
+        elif action == "create_ruby_offer":
+            ruby_amount = int(request.POST.get("ruby_amount") or 0)
+            price_coins = int(request.POST.get("price_coins") or 0)
+
+            if ruby_amount <= 0 or price_coins <= 0:
+                messages.error(request, "Debes indicar cantidad de rubíes y precio en monedas.")
+                return redirect("rpg_vip_admin")
+
+            VipShopOffer.objects.create(
+                offer_type=VipShopOffer.TYPE_RUBIES,
+                item=None,
+                ruby_amount=ruby_amount,
+                price_coins=price_coins,
+                price_rubies=0,
+                created_by=request.user,
+            )
+
+            messages.success(request, f"Se ha creado una oferta VIP de {ruby_amount} rubí(es).")
+            return redirect("rpg_vip_admin")
+
+        # Activar / desactivar oferta
+        elif action == "toggle_active":
+            offer_id = request.POST.get("offer_id")
+            offer = get_object_or_404(VipShopOffer, pk=offer_id)
+            offer.is_active = not offer.is_active
+            offer.save()
+            estado = "activado" if offer.is_active else "desactivado"
+            messages.success(request, f"Has {estado} la oferta VIP #{offer.id}.")
+            return redirect("rpg_vip_admin")
+
+    # Listar todas las ofertas VIP
+    offers = VipShopOffer.objects.select_related("item", "created_by", "buyer")
+
+    context = {
+        "profile": profile,
+        "offers": offers,
+        "rarities": ItemRarity.choices,
+        "slots": ItemSlot.choices,
+    }
+    return render(request, "notes/rpg_vip_admin.html", context)

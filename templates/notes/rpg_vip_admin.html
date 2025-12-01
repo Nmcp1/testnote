@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .rarity-basic { color: #9e9e9e; }        /* gris */
+  .rarity-uncommon { color: #4caf50; }     /* verde */
+  .rarity-special { color: #2196f3; }      /* azul */
+  .rarity-epic { color: #9c27b0; }         /* morado */
+  .rarity-legendary { color: #ffeb3b; font-weight: bold; }  /* amarillo */
+  .rarity-mythic { color: #f44336; font-weight: bold; }     /* rojo */
+  .rarity-ascended { color: #e91e63; font-weight: bold; }   /* rosado */
+</style>
+
+<h2 class="fw-bold mb-3">👑 Administración Tienda VIP</h2>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
+    ← Volver al hub RPG
+  </a>
+  <a href="{% url 'rpg_vip_shop' %}" class="btn btn-outline-primary btn-sm rounded-pill">
+    Ver tienda VIP como jugador
+  </a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Crear oferta de objeto VIP</h5>
+        <form method="post" class="row g-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="create_item_offer">
+
+          <div class="col-6">
+            <label class="form-label mb-1">Tipo de equipamiento</label>
+            <select name="slot" class="form-select form-select-sm">
+              {% for code, label in slots %}
+                <option value="{{ code }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-6">
+            <label class="form-label mb-1">Rareza</label>
+            <select name="rarity" class="form-select form-select-sm">
+              {% for code, label in rarities %}
+                <option value="{{ code }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label mb-1">Nombre (opcional)</label>
+            <input type="text" name="name" class="form-control form-control-sm"
+                   placeholder="Espada Mítica VIP, etc.">
+          </div>
+
+          <div class="col-6">
+            <label class="form-label mb-1">Precio en monedas</label>
+            <input type="number" min="0" name="price_coins"
+                   class="form-control form-control-sm" value="0">
+          </div>
+
+          <div class="col-6">
+            <label class="form-label mb-1">Precio en rubíes</label>
+            <input type="number" min="0" name="price_rubies"
+                   class="form-control form-control-sm" value="0">
+          </div>
+
+          <div class="col-12 mt-2">
+            <button type="submit" class="btn btn-success btn-sm">
+              Crear oferta de objeto
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="fw-bold mb-2">Crear oferta de rubíes</h5>
+        <form method="post" class="row g-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="create_ruby_offer">
+
+          <div class="col-6">
+            <label class="form-label mb-1">Cantidad de rubíes</label>
+            <input type="number" min="1" name="ruby_amount"
+                   class="form-control form-control-sm" value="10">
+          </div>
+
+          <div class="col-6">
+            <label class="form-label mb-1">Precio en monedas</label>
+            <input type="number" min="1" name="price_coins"
+                   class="form-control form-control-sm" value="100">
+          </div>
+
+          <div class="col-12 mt-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+              Crear oferta de rubíes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h5 class="fw-bold mb-2">Ofertas VIP actuales</h5>
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Tipo</th>
+        <th>Detalle</th>
+        <th>Precio</th>
+        <th>Activa</th>
+        <th>Comprador</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for offer in offers %}
+        <tr>
+          <td>{{ offer.id }}</td>
+          <td>
+            {% if offer.offer_type == "item" %}
+              Objeto
+            {% else %}
+              Rubíes
+            {% endif %}
+          </td>
+          <td style="font-size: 0.85rem;">
+            {% if offer.offer_type == "item" and offer.item %}
+              <span class="rarity-{{ offer.item.rarity }}">
+                {{ offer.item.name }}
+              </span>
+              <br>
+              <small>
+                {{ offer.item.get_slot_display }} —
+                ATK {{ offer.item.attack }},
+                DEF {{ offer.item.defense }},
+                HP {{ offer.item.hp }}
+              </small>
+            {% elif offer.offer_type == "rubies" %}
+              {{ offer.ruby_amount }} rubí(es)
+            {% endif %}
+          </td>
+          <td>
+            {% if offer.price_coins > 0 %}
+              💰 {{ offer.price_coins }}<br>
+            {% endif %}
+            {% if offer.price_rubies > 0 %}
+              💎 {{ offer.price_rubies }}
+            {% endif %}
+          </td>
+          <td>
+            {% if offer.is_active %}
+              <span class="badge bg-success">Activa</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactiva</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if offer.buyer %}
+              {{ offer.buyer.username }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="toggle_active">
+              <input type="hidden" name="offer_id" value="{{ offer.id }}">
+              <button type="submit" class="btn btn-sm {% if offer.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                {% if offer.is_active %}Desactivar{% else %}Activar{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7" class="text-muted">No hay ofertas VIP aún.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

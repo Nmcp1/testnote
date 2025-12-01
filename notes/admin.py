@@ -20,6 +20,7 @@ from .models import (
     MiniBossLobby,
     MiniBossParticipant,
     MarketListing,
+    VipShopOffer
 )
 
 # --- Notas -------------------------------------------------------
@@ -184,3 +185,9 @@ class MarketListingAdmin(admin.ModelAdmin):
     list_display = ("id", "item", "seller", "buyer", "price_coins", "is_active", "created_at")
     list_filter = ("is_active", "created_at")
     search_fields = ("item__name", "seller__username", "buyer__username")
+
+@admin.register(VipShopOffer)
+class VipShopOfferAdmin(admin.ModelAdmin):
+    list_display = ("id", "offer_type", "item", "ruby_amount", "price_coins", "price_rubies", "is_active", "created_by", "buyer", "created_at")
+    list_filter = ("offer_type", "is_active")
+    search_fields = ("item__name", "created_by__username", "buyer__username")

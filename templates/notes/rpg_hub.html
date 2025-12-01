@@ -1,119 +1,263 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2 class="fw-bold mb-3">RPG — Hub principal</h2>
+<style>
+  .hub-left-panel {
+    border-radius: 0.75rem;
+    padding: 0.8rem 1rem;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .hub-right-panel {
+    border-radius: 0.75rem;
+    padding: 1rem 1.2rem;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .hub-card {
+    background-color: #ffffff;
+    border-radius: 0.8rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    padding: 0.7rem 0.9rem;
+    height: 100%;
+  }
+
+  .hub-section-title {
+    font-size: 0.98rem;
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+  }
+
+  .hub-small-text {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .hub-big-btn {
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+
+  h3.hub-main-title {
+    font-size: 1.25rem;
+    margin-bottom: 0.8rem;
+  }
+
+  h5.hub-block-title {
+    font-size: 1rem;
+    margin: 0.3rem 0 0.4rem 0;
+  }
+
+  .hub-row {
+    margin-bottom: 0.6rem;
+  }
+</style>
 
 <div class="row g-3">
-  <!-- Panel izquierdo: stats del jugador -->
-  <div class="col-lg-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h5 class="fw-bold mb-2">Tu personaje</h5>
-        <p class="mb-1">Usuario: <strong>{{ request.user.username }}</strong></p>
-        <p class="mb-1">Monedas: <strong>{{ profile.coins }}</strong></p>
-        <hr>
-        <p class="mb-1">Vida total: <strong>{{ stats.hp }}</strong></p>
-        <p class="mb-1">Ataque: <strong>{{ stats.attack }}</strong></p>
-        <p class="mb-1">Defensa: <strong>{{ stats.defense }}</strong></p>
-        <p class="mb-1">Crítico: <strong>{{ stats.crit_chance }}%</strong></p>
-        <p class="mb-1">Esquive: <strong>{{ stats.dodge_chance }}%</strong></p>
-        <p class="mb-0">Velocidad: <strong>{{ stats.speed }}</strong></p>
+
+  <!-- ================== PANEL IZQUIERDO ================== -->
+  <div class="col-lg-3">
+    <div class="hub-left-panel h-100 d-flex flex-column gap-2">
+
+      <!-- Stats -->
+      <div class="hub-card border-0 p-0">
+        <h6 class="fw-bold mb-1">Tu personaje</h6>
+        <p class="hub-small-text">Usuario: <strong>{{ request.user.username }}</strong></p>
+        <p class="hub-small-text">🪙 Monedas: <strong>{{ profile.coins }}</strong></p>
+        <p class="hub-small-text mb-1">💎 Rubíes: <strong>{{ profile.rubies }}</strong></p>
+
+        <hr class="my-1">
+
+        <p class="hub-small-text">HP: <strong>{{ stats.hp }}</strong></p>
+        <p class="hub-small-text">ATK: <strong>{{ stats.attack }}</strong></p>
+        <p class="hub-small-text">DEF: <strong>{{ stats.defense }}</strong></p>
+        <p class="hub-small-text">CRIT: <strong>{{ stats.crit_chance }}%</strong></p>
+        <p class="hub-small-text">ESQ: <strong>{{ stats.dodge_chance }}%</strong></p>
+        <p class="hub-small-text mb-1">VEL: <strong>{{ stats.speed }}</strong></p>
       </div>
-    </div>
-  </div>
 
-  <!-- Panel derecho: modos de juego -->
-  <div class="col-lg-8">
-    <div class="card shadow-sm h-100">
-      <div class="card-body d-flex flex-column justify-content-between">
+      <!-- Gestión rápida -->
+      <div class="hub-card border-0 p-0">
+        <h6 class="fw-bold mb-2">Gestión rápida</h6>
 
-        <!-- PvE Torre -->
-        <div>
-          <h5 class="fw-bold mb-2">Modo PvE — Torre</h5>
-          <p class="mb-1">
-            Piso actual: <strong>{{ tower.current_floor }}</strong>
-          </p>
-          <p class="mb-3">
-            Máximo piso alcanzado: <strong>{{ tower.max_floor_reached }}</strong>
-          </p>
-        </div>
-
-        <div class="d-flex flex-wrap gap-2 mt-2">
-          <a href="{% url 'rpg_tower' %}" class="btn btn-primary rounded-pill">
-            🗼 Entrar a la torre
-          </a>
-          <a href="{% url 'rpg_inventory' %}" class="btn btn-outline-secondary rounded-pill">
+        <div class="d-flex flex-column gap-1">
+          <a href="{% url 'rpg_inventory' %}"
+             class="btn btn-primary hub-big-btn rounded-pill w-100">
             🎒 Inventario
           </a>
-          <a href="{% url 'rpg_shop' %}" class="btn btn-outline-secondary rounded-pill">
-            🛒 Tienda
-          </a>
-          <a href="{% url 'rpg_gacha' %}" class="btn btn-outline-secondary rounded-pill">
+          <a href="{% url 'rpg_gacha' %}"
+             class="btn btn-outline-primary hub-big-btn rounded-pill w-100">
             ⭐ Gacha
           </a>
-          <a href="{% url 'rpg_trades' %}" class="btn btn-outline-secondary rounded-pill">
-            🔁 Intercambios
-          </a>
-          <a href="{% url 'rpg_market' %}" class="btn btn-outline-secondary rounded-pill">
-            🛍️ Mercado Libre
+          <a href="{% url 'rpg_vip_shop' %}"
+             class="btn btn-outline-warning hub-big-btn rounded-pill w-100">
+            👑 Tienda VIP
           </a>
         </div>
+      </div>
 
-        <hr class="my-3">
+    </div>
+  </div>
 
-        <!-- PvP -->
-        <div>
-          <h5 class="fw-bold mb-2">Modo PvP — Arena</h5>
-          <p class="text-muted mb-2" style="font-size: 0.9rem;">
-            Desafía a jugadores con mejor clasificación, roba su puesto y reclama recompensas diarias.
-          </p>
-          <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'rpg_pvp_arena' %}" class="btn btn-danger rounded-pill">
-              ⚔️ Arena PvP
-            </a>
-            <a href="{% url 'rpg_pvp_leaderboard' %}" class="btn btn-outline-danger rounded-pill">
-              🏆 Ranking PvP
+  <!-- ================== PANEL DERECHO ================== -->
+  <div class="col-lg-9">
+    <div class="hub-right-panel">
+
+      <h3 class="fw-bold hub-main-title">RPG — Hub principal</h3>
+
+      <!-- PvE -->
+      <h5 class="fw-bold hub-block-title">🗡️ PvE</h5>
+      <div class="row row-cols-1 row-cols-md-3 g-2 hub-row">
+
+        <!-- Torre -->
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">🗼 Torre</div>
+            <p class="hub-small-text text-muted">
+              Piso: <strong>{{ tower.current_floor }}</strong> /
+              Máx: <strong>{{ tower.max_floor_reached }}</strong>
+            </p>
+            <a href="{% url 'rpg_tower' %}"
+               class="btn btn-primary hub-big-btn rounded-pill w-100 mt-auto">
+              Entrar
             </a>
           </div>
         </div>
-
-        <hr class="my-3">
 
         <!-- World Boss -->
-        <div>
-          <h5 class="fw-bold mb-2">World Boss — Evento global</h5>
-          <p class="text-muted mb-2" style="font-size: 0.9rem;">
-            Cada 3 horas se abre un ciclo donde todos los jugadores pueden unirse para
-            atacar juntos a un jefe inmortal. El daño total realizado otorga monedas a
-            todos los participantes.
-          </p>
-          <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'rpg_world_boss' %}" class="btn btn-dark rounded-pill">
-              🐲 Ir al World Boss
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">🐲 World Boss</div>
+            <p class="hub-small-text text-muted">
+              Evento global cooperativo cada 3 horas.
+            </p>
+            <a href="{% url 'rpg_world_boss' %}"
+               class="btn btn-dark hub-big-btn rounded-pill w-100 mt-auto">
+              Ir
             </a>
           </div>
         </div>
 
-        <hr class="my-3">
-
         <!-- Minijefes -->
-        <div>
-          <h5 class="fw-bold mb-2">Minijefes — Lobbies cooperativos</h5>
-          <p class="text-muted mb-2" style="font-size: 0.9rem;">
-            Crea o únete a lobbies contra jefes especiales como Varón Polilla, Comandante Gato
-            o Pesadilla Freddy. Haz todo el daño que puedas en varios turnos y obtén monedas
-            según el aporte que realices.
-          </p>
-          <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'rpg_miniboss_hub' %}" class="btn btn-warning rounded-pill">
-              👹 Ir a los Minijefes
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">👹 Minijefes</div>
+            <p class="hub-small-text text-muted">
+              Lobbies cooperativos contra jefes especiales.
+            </p>
+            <a href="{% url 'rpg_miniboss_hub' %}"
+               class="btn btn-warning hub-big-btn rounded-pill w-100 mt-auto">
+              Entrar
             </a>
           </div>
         </div>
 
       </div>
+
+      <!-- PvP -->
+      <h5 class="fw-bold hub-block-title mt-1">⚔️ PvP</h5>
+      <div class="row row-cols-1 row-cols-md-2 g-2 hub-row">
+
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">Arena PvP</div>
+            <p class="hub-small-text text-muted">
+              Desafía a jugadores con mejor clasificación.
+            </p>
+            <div class="d-flex gap-2 mt-auto">
+              <a href="{% url 'rpg_pvp_arena' %}"
+                 class="btn btn-danger hub-big-btn rounded-pill flex-fill">
+                Arena
+              </a>
+              <a href="{% url 'rpg_pvp_leaderboard' %}"
+                 class="btn btn-outline-danger hub-big-btn rounded-pill flex-fill">
+                Ranking
+              </a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tiendas y economía -->
+      <h5 class="fw-bold hub-block-title mt-1">🛒 Tiendas y economía</h5>
+      <div class="row row-cols-1 row-cols-md-3 g-2">
+
+        <!-- Tienda & Gacha -->
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">Tienda & Gacha</div>
+            <p class="hub-small-text text-muted">
+              Compra básicos o prueba suerte.
+            </p>
+            <div class="d-flex flex-column gap-1 mt-auto">
+              <a href="{% url 'rpg_shop' %}"
+                 class="btn btn-outline-secondary hub-big-btn rounded-pill w-100">
+                🛒 Tienda
+              </a>
+              <a href="{% url 'rpg_gacha' %}"
+                 class="btn btn-outline-secondary hub-big-btn rounded-pill w-100">
+                ⭐ Gacha
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inventario & Trades -->
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">Inventario & Trades</div>
+            <p class="hub-small-text text-muted">
+              Gestiona equipo e intercambios.
+            </p>
+            <div class="d-flex flex-column gap-1 mt-auto">
+              <a href="{% url 'rpg_inventory' %}"
+                 class="btn btn-outline-secondary hub-big-btn rounded-pill w-100">
+                🎒 Inventario
+              </a>
+              <a href="{% url 'rpg_trades' %}"
+                 class="btn btn-outline-secondary hub-big-btn rounded-pill w-100">
+                🔁 Trades
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mercado & VIP -->
+        <div class="col">
+          <div class="hub-card d-flex flex-column">
+            <div class="hub-section-title">Mercado & VIP</div>
+            <p class="hub-small-text text-muted">
+              Mercado entre jugadores y tienda VIP.
+            </p>
+            <div class="d-flex flex-column gap-1 mt-auto">
+              <a href="{% url 'rpg_market' %}"
+                 class="btn btn-outline-secondary hub-big-btn rounded-pill w-100">
+                🛍️ Mercado
+              </a>
+              <a href="{% url 'rpg_vip_shop' %}"
+                 class="btn btn-outline-warning hub-big-btn rounded-pill w-100">
+                👑 Tienda VIP
+              </a>
+              {% if request.user.is_superuser %}
+              <a href="{% url 'rpg_vip_admin' %}"
+                 class="btn btn-outline-danger hub-big-btn rounded-pill w-100">
+                ⚙️ Admin VIP
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
     </div>
   </div>
+
 </div>
 
 {% endblock %}

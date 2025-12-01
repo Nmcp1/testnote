@@ -128,6 +128,18 @@
                                 ⭐ Gacha
                             </a>
                         </li>
+                        <li>
+                        <a class="dropdown-item" href="{% url 'rpg_vip_shop' %}">
+                            👑 Tienda VIP
+                        </a>
+                        </li>
+                        {% if user.is_superuser %}
+                        <li>
+                        <a class="dropdown-item text-danger" href="{% url 'rpg_vip_admin' %}">
+                            👑 Admin Tienda VIP
+                        </a>
+                        </li>
+                        {% endif %}
 
                         <!-- Mercado -->
                         <li>

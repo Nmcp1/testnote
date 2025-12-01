@@ -33,4 +33,7 @@ urlpatterns = [
     path("rpg/market/list/<int:item_id>/", views.rpg_market_list_item, name="rpg_market_list_item"),
     path("rpg/market/cancel/<int:listing_id>/", views.rpg_market_cancel, name="rpg_market_cancel"),
     path("rpg/market/buy/<int:listing_id>/", views.rpg_market_buy, name="rpg_market_buy"),
+
+    path("rpg/vip-shop/", views.rpg_vip_shop, name="rpg_vip_shop"),
+    path("rpg/vip-admin/", views.rpg_vip_admin, name="rpg_vip_admin"),
 ]

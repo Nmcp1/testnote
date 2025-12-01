@@ -555,3 +555,60 @@ class MarketListing(models.Model):
 
     def __str__(self):
         return f"{self.item.name} por {self.price_coins} monedas ({self.seller.username})"
+
+
+class VipShopOffer(models.Model):
+    TYPE_ITEM = "item"
+    TYPE_RUBIES = "rubies"
+
+    TYPE_CHOICES = [
+        (TYPE_ITEM, "Objeto"),
+        (TYPE_RUBIES, "Paquete de rubíes"),
+    ]
+
+    offer_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+    )
+
+    # Si es oferta de ítem
+    item = models.OneToOneField(
+        CombatItem,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vip_offer",
+    )
+
+    # Si es oferta de rubíes
+    ruby_amount = models.PositiveIntegerField(default=0)
+
+    # Precio (se puede pagar con monedas, con rubíes, o con ambos si quisieras)
+    price_coins = models.PositiveIntegerField(default=0)
+    price_rubies = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="vip_offers_created",
+    )
+    buyer = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="vip_purchases",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        if self.offer_type == self.TYPE_ITEM and self.item:
+            return f"VIP: {self.item.name} por {self.price_coins} monedas / {self.price_rubies} rubíes"
+        else:
+            return f"VIP: {self.ruby_amount} rubíes por {self.price_coins} monedas"
