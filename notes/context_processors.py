@@ -7,6 +7,7 @@ def notifications_context(request):
     unread_count = 0
     is_moderator = False
     user_coins = 0
+    user_rubies = 0
 
     if request.user.is_authenticated:
         unread_count = Notification.objects.filter(
@@ -22,10 +23,11 @@ def notifications_context(request):
         # Asegurar que el usuario tenga perfil y leer sus monedas
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
         user_coins = profile.coins
+        user_rubies = profile.rubies
 
     return {
         "unread_notifications_count": unread_count,
         "is_moderator": is_moderator,
         "user_coins": user_coins,
-        "user_rubies": profile.rubies, 
+        "user_rubies": user_rubies, 
     }
