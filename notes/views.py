@@ -1190,23 +1190,25 @@ def rpg_inventory(request):
 
     # Filtro por tipo de slot
     slot_filter = request.GET.get("slot", "all")
-    items_qs = CombatItem.objects.filter(
-    owner=request.user,
-    market_listing__isnull=True,   # excluye los que están en el mercado
-    ).order_by("-created_at")
+
+    # Mostrar TODOS los ítems del jugador, excepto los que estén
+    # actualmente listados en el mercado (is_active=True).
+    from django.db.models import Q
+
+    items_qs = (
+        CombatItem.objects
+        .filter(owner=request.user)
+        .exclude(market_listing__is_active=True)  # <- clave
+        .order_by("-created_at")
+    )
+
     valid_slots = {s.value for s in ItemSlot}
     if slot_filter in valid_slots:
         items_qs = items_qs.filter(slot=slot_filter)
 
-    # Ordenar por rareza (más alta primero) y dentro de la misma rareza por fecha
-    def rarity_key(it):
-        base = RARITY_ORDER.get(it.rarity, 0)
-        created = it.created_at or timezone.now()
-        return (base, created)
+    items = items_qs
 
-    items = sorted(items_qs, key=rarity_key, reverse=True)
-
-    # IDs de items equipados (para mostrar "Equipado" y evitar venderlos)
+    # IDs equipados (igual que antes)
     equipped_ids = set()
     for field in [
         "equipped_weapon", "equipped_helmet", "equipped_armor",
@@ -1219,10 +1221,6 @@ def rpg_inventory(request):
 
     if request.method == "POST":
         action = request.POST.get("action")
-
-        # ------------------
-        # EQUIPAR ITEM
-        # ------------------
         if action == "equip":
             item_id = request.POST.get("item_id")
             item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
@@ -1230,126 +1228,38 @@ def rpg_inventory(request):
             if item.slot == ItemSlot.WEAPON:
                 profile.equipped_weapon = item
                 messages.success(request, f"Has equipado {item.name} como arma.")
-
             elif item.slot == ItemSlot.HELMET:
                 profile.equipped_helmet = item
                 messages.success(request, f"Has equipado {item.name} como casco.")
-
             elif item.slot == ItemSlot.ARMOR:
                 profile.equipped_armor = item
                 messages.success(request, f"Has equipado {item.name} como armadura.")
-
             elif item.slot == ItemSlot.PANTS:
                 profile.equipped_pants = item
                 messages.success(request, f"Has equipado {item.name} como pantalones.")
-
             elif item.slot == ItemSlot.BOOTS:
                 profile.equipped_boots = item
                 messages.success(request, f"Has equipado {item.name} como botas.")
-
             elif item.slot == ItemSlot.SHIELD:
                 profile.equipped_shield = item
                 messages.success(request, f"Has equipado {item.name} como escudo.")
-
             elif item.slot == ItemSlot.AMULET:
-                # Elegir slot de amuleto 1 / 2 / 3
-                slot_choice = request.POST.get("amulet_slot", "1")
-                if slot_choice == "2":
+                if profile.equipped_amulet1 is None:
+                    profile.equipped_amulet1 = item
+                    messages.success(request, f"Has equipado {item.name} en Amuleto 1.")
+                elif profile.equipped_amulet2 is None:
                     profile.equipped_amulet2 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 2.")
-                elif slot_choice == "3":
+                elif profile.equipped_amulet3 is None:
                     profile.equipped_amulet3 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 3.")
                 else:
                     profile.equipped_amulet1 = item
-                    messages.success(request, f"Has equipado {item.name} en Amuleto 1.")
-
+                    messages.success(request, f"Has reemplazado el Amuleto 1 con {item.name}.")
             profile.save()
             return redirect("rpg_inventory")
 
-        # ------------------
-        # VENDER UN SOLO ITEM
-        # ------------------
-        elif action == "sell":
-            item_id = request.POST.get("item_id")
-            item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
-
-            if item.id in equipped_ids:
-                messages.error(
-                    request,
-                    "No puedes vender un objeto que tienes equipado. Desequípalo primero."
-                )
-                return redirect("rpg_inventory")
-
-            value = RARITY_SELL_VALUE.get(item.rarity, 0)
-            if value <= 0:
-                messages.error(request, "Este objeto no se puede vender.")
-                return redirect("rpg_inventory")
-
-            profile.coins += value
-            profile.save()
-            name = item.name
-            item.delete()
-
-            messages.success(
-                request,
-                f"Has vendido {name} por {value} monedas."
-            )
-            return redirect("rpg_inventory")
-
-        # ------------------
-        # VENTA MÚLTIPLE
-        # ------------------
-        elif action == "sell_bulk":
-            selected_ids = request.POST.getlist("selected_items")
-            if not selected_ids:
-                messages.info(request, "No seleccionaste ningún objeto para vender.")
-                return redirect("rpg_inventory")
-
-            items_to_sell_qs = CombatItem.objects.filter(
-                owner=request.user,
-                pk__in=selected_ids
-            )
-
-            total_value = 0
-            sold_count = 0
-            blocked_count = 0
-
-            for it in items_to_sell_qs:
-                if it.id in equipped_ids:
-                    blocked_count += 1
-                    continue
-
-                value = RARITY_SELL_VALUE.get(it.rarity, 0)
-                if value <= 0:
-                    continue
-
-                total_value += value
-                sold_count += 1
-                it.delete()
-
-            if sold_count > 0:
-                profile.coins += total_value
-                profile.save()
-                msg = f"Has vendido {sold_count} objeto(s) por un total de {total_value} monedas."
-                if blocked_count > 0:
-                    msg += f" {blocked_count} objeto(s) equipados no se vendieron."
-                messages.success(request, msg)
-            else:
-                if blocked_count > 0:
-                    messages.error(
-                        request,
-                        "Todos los objetos seleccionados estaban equipados y no se pudieron vender."
-                    )
-                else:
-                    messages.info(
-                        request,
-                        "No se pudo vender ningún objeto con los criterios actuales."
-                    )
-
-            return redirect("rpg_inventory")
-
-    # Recalcular stats y equipados tras cambios
+    # Recalcular stats y equipados para mostrar
     stats = get_total_stats(request.user)
     equipped_ids = set()
     for field in [
@@ -2836,61 +2746,43 @@ def rpg_market_cancel(request, listing_id):
 
 
 @login_required
-@require_POST
 def rpg_market_buy(request, listing_id):
-    """
-    Comprar una oferta del mercado:
-    - Verifica monedas.
-    - Transfiere monedas del comprador al vendedor.
-    - Transfiere el objeto al comprador.
-    - Desactiva la publicación.
-    """
-    listing = get_object_or_404(
-        MarketListing.objects.select_related("item", "seller"),
-        pk=listing_id,
-        is_active=True,
-    )
+    listing = get_object_or_404(MarketListing, pk=listing_id, is_active=True)
+    buyer = request.user
+    seller = listing.seller
 
-    if listing.seller_id == request.user.id:
+    if buyer == seller:
         messages.error(request, "No puedes comprar tu propio objeto.")
         return redirect("rpg_market")
 
-    buyer_profile = get_or_create_profile(request.user)
-    if buyer_profile.coins < listing.price_coins:
-        messages.error(request, "No tienes suficientes monedas para esta compra.")
-        return redirect("rpg_market")
+    profile_buyer = get_or_create_profile(buyer)
+    profile_seller = get_or_create_profile(seller)
 
-    seller_profile = get_or_create_profile(listing.seller)
-
-    with transaction.atomic():
-        # Bloqueo básico: volvemos a verificar que sigue activo
-        listing = MarketListing.objects.select_for_update().get(pk=listing.pk)
-        if not listing.is_active:
-            messages.error(request, "La oferta ya no está disponible.")
-            return redirect("rpg_market")
-
-        if buyer_profile.coins < listing.price_coins:
+    if request.method == "POST":
+        if profile_buyer.coins < listing.price_coins:
             messages.error(request, "No tienes suficientes monedas.")
             return redirect("rpg_market")
 
-        # Transferir monedas
-        buyer_profile.coins -= listing.price_coins
-        seller_profile.coins += listing.price_coins
-        buyer_profile.save()
-        seller_profile.save()
+        # Transferencia de monedas
+        profile_buyer.coins -= listing.price_coins
+        profile_seller.coins += listing.price_coins
+        profile_buyer.save()
+        profile_seller.save()
 
-        # Transferir objeto
+        # Transferencia de ítem
         item = listing.item
-        item.owner = request.user
+        item.owner = buyer
         item.save()
 
         # Cerrar listing
         listing.is_active = False
-        listing.buyer = request.user
+        listing.buyer = buyer
         listing.save()
 
-    messages.success(
-        request,
-        f"Has comprado {item.name} por {listing.price_coins} monedas."
-    )
+        messages.success(
+            request,
+            f"Has comprado {item.name} por {listing.price_coins} monedas."
+        )
+        return redirect("rpg_inventory")
+
     return redirect("rpg_market")
