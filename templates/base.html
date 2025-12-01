@@ -123,6 +123,13 @@
                             </a>
                         </li>
 
+                        <!-- Mercado -->
+                        <li>
+                            <a class="dropdown-item" href="{% url 'rpg_market' %}">
+                                🛍️ Mercado
+                            </a>
+                        </li>
+
                         <!-- Intercambios -->
                         <li>
                             <a class="dropdown-item" href="{% url 'rpg_trades' %}">
@@ -152,7 +159,7 @@
                             </a>
                         </li>
 
-                        <!-- Minijefes -->
+                        <!-- Mini Bosses -->
                         <li>
                             <a class="dropdown-item" href="{% url 'rpg_miniboss_hub' %}">
                                 👹 Minijefes
@@ -191,17 +198,17 @@
                         </a>
                     </li>
 
-                    <!-- Monedas normales -->
-                    <li class="nav-item d-flex align-items-center mx-2">
-                        <span class="text-warning fw-bold">
-                            🪙 {{ user_coins|default:"0" }}
-                        </span>
-                    </li>
-
-                    <!-- Rubíes premium -->
+                    <!-- Rubíes -->
                     <li class="nav-item d-flex align-items-center mx-2">
                         <span class="fw-bold" style="color:#ff4dd2;">
                             💎 {{ user_rubies|default:"0" }}
+                        </span>
+                    </li>
+
+                    <!-- Monedas -->
+                    <li class="nav-item d-flex align-items-center mx-2">
+                        <span class="text-warning fw-bold">
+                            🪙 {{ user_coins|default:"0" }}
                         </span>
                     </li>
 
@@ -236,7 +243,7 @@
 
 <div class="container">
 
-    {% if messages %}
+    {% if messages and not hide_messages %}
       <div class="mb-3">
         {% for message in messages %}
           <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">

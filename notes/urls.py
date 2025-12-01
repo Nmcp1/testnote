@@ -28,4 +28,9 @@ urlpatterns = [
     path('rpg/world-boss/', views.rpg_world_boss, name='rpg_world_boss'),
     path('rpg/miniboss/', views.rpg_miniboss_hub, name='rpg_miniboss_hub'),
     path('rpg/miniboss/<int:lobby_id>/', views.rpg_miniboss_lobby, name='rpg_miniboss_lobby'),
+
+    path("rpg/market/", views.rpg_market, name="rpg_market"),
+    path("rpg/market/list/<int:item_id>/", views.rpg_market_list_item, name="rpg_market_list_item"),
+    path("rpg/market/cancel/<int:listing_id>/", views.rpg_market_cancel, name="rpg_market_cancel"),
+    path("rpg/market/buy/<int:listing_id>/", views.rpg_market_buy, name="rpg_market_buy"),
 ]

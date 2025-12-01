@@ -37,7 +37,8 @@ from .models import (
     WorldBossCycle,
     WorldBossParticipant,
     MiniBossParticipant,
-    MiniBossLobby
+    MiniBossLobby,
+    MarketListing,
 
 )
 from .forms import (
@@ -1189,7 +1190,10 @@ def rpg_inventory(request):
 
     # Filtro por tipo de slot
     slot_filter = request.GET.get("slot", "all")
-    items_qs = CombatItem.objects.filter(owner=request.user)
+    items_qs = CombatItem.objects.filter(
+    owner=request.user,
+    market_listing__isnull=True,   # excluye los que están en el mercado
+    ).order_by("-created_at")
     valid_slots = {s.value for s in ItemSlot}
     if slot_filter in valid_slots:
         items_qs = items_qs.filter(slot=slot_filter)
@@ -2697,3 +2701,196 @@ def rpg_miniboss_lobby(request, lobby_id):
         "hero": hero,
     }
     return render(request, "notes/rpg_miniboss_lobby.html", context)
+
+# ============================================================
+#  MERCADO
+# ============================================================
+
+RARITY_CHOICES_VALUES = [choice[0] for choice in ItemRarity.choices]
+
+
+# ============================================================
+#  MERCADO
+# ============================================================
+
+# valores de rareza (basic, uncommon, …) para validar el filtro
+RARITY_CHOICES_VALUES = [choice[0] for choice in ItemRarity.choices]
+
+
+@login_required
+def rpg_market(request):
+    """
+    Mercado global:
+    - Lista todas las ofertas activas.
+    - Permite filtrar por rareza.
+    - Muestra las publicaciones propias y los objetos disponibles para listar.
+    """
+    profile = get_or_create_profile(request.user)
+
+    rarity_filter = request.GET.get("rarity", "all")
+
+    listings_qs = (
+        MarketListing.objects
+        .filter(is_active=True)
+        .select_related("item", "seller")
+    )
+    if rarity_filter in RARITY_CHOICES_VALUES:
+        listings_qs = listings_qs.filter(item__rarity=rarity_filter)
+
+    listings = list(listings_qs)
+
+    # Publicaciones del usuario
+    my_listings = list(
+        MarketListing.objects
+        .filter(is_active=True, seller=request.user)
+        .select_related("item")
+    )
+
+    # Objetos disponibles para poner en venta (no listados ya)
+    available_items = CombatItem.objects.filter(
+        owner=request.user,
+        market_listing__isnull=True,   # <-- importante para que no aparezcan los listados
+    ).order_by("-created_at")
+
+    # choices (value, label) para el combo de rareza en el template
+    item_rarity_choices = ItemRarity.choices
+
+    context = {
+        "profile": profile,
+        "listings": listings,
+        "my_listings": my_listings,
+        "available_items": available_items,
+        "rarity_filter": rarity_filter,
+        "item_rarity_choices": item_rarity_choices,
+    }
+    return render(request, "notes/rpg_market.html", context)
+
+
+@login_required
+@require_POST
+def rpg_market_list_item(request, item_id):
+    """
+    Poner un objeto en el mercado con un precio en monedas.
+    El objeto deja de aparecer en el inventario (porque lo filtramos por market_listing__isnull=True).
+    """
+    item = get_object_or_404(CombatItem, pk=item_id, owner=request.user)
+
+    # Ya está listado
+    if hasattr(item, "market_listing") and item.market_listing.is_active:
+        messages.error(request, "Ese objeto ya está en el mercado.")
+        return redirect("rpg_market")
+
+    price_str = request.POST.get("price", "").strip()
+    try:
+        price = int(price_str)
+    except ValueError:
+        messages.error(request, "El precio debe ser un número entero.")
+        return redirect("rpg_market")
+
+    if price <= 0:
+        messages.error(request, "El precio debe ser mayor que 0.")
+        return redirect("rpg_market")
+
+    # Si estaba equipado, lo desequipamos
+    profile = get_or_create_profile(request.user)
+    changed = False
+    for field in [
+        "equipped_weapon", "equipped_helmet", "equipped_armor",
+        "equipped_pants", "equipped_boots", "equipped_shield",
+        "equipped_amulet1", "equipped_amulet2", "equipped_amulet3",
+    ]:
+        if getattr(profile, field, None) == item:
+            setattr(profile, field, None)
+            changed = True
+    if changed:
+        profile.save()
+
+    MarketListing.objects.create(
+        item=item,
+        seller=request.user,
+        price_coins=price,
+        is_active=True,
+    )
+
+    messages.success(request, f"Has puesto {item.name} en el mercado por {price} monedas.")
+    return redirect("rpg_market")
+
+
+@login_required
+@require_POST
+def rpg_market_cancel(request, listing_id):
+    """
+    Cancelar una publicación propia.
+    El objeto vuelve a aparecer en el inventario.
+    """
+    listing = get_object_or_404(
+        MarketListing,
+        pk=listing_id,
+        seller=request.user,
+        is_active=True,
+    )
+    listing.is_active = False
+    listing.save()
+    messages.info(request, f"Has cancelado la venta de {listing.item.name}.")
+    return redirect("rpg_market")
+
+
+@login_required
+@require_POST
+def rpg_market_buy(request, listing_id):
+    """
+    Comprar una oferta del mercado:
+    - Verifica monedas.
+    - Transfiere monedas del comprador al vendedor.
+    - Transfiere el objeto al comprador.
+    - Desactiva la publicación.
+    """
+    listing = get_object_or_404(
+        MarketListing.objects.select_related("item", "seller"),
+        pk=listing_id,
+        is_active=True,
+    )
+
+    if listing.seller_id == request.user.id:
+        messages.error(request, "No puedes comprar tu propio objeto.")
+        return redirect("rpg_market")
+
+    buyer_profile = get_or_create_profile(request.user)
+    if buyer_profile.coins < listing.price_coins:
+        messages.error(request, "No tienes suficientes monedas para esta compra.")
+        return redirect("rpg_market")
+
+    seller_profile = get_or_create_profile(listing.seller)
+
+    with transaction.atomic():
+        # Bloqueo básico: volvemos a verificar que sigue activo
+        listing = MarketListing.objects.select_for_update().get(pk=listing.pk)
+        if not listing.is_active:
+            messages.error(request, "La oferta ya no está disponible.")
+            return redirect("rpg_market")
+
+        if buyer_profile.coins < listing.price_coins:
+            messages.error(request, "No tienes suficientes monedas.")
+            return redirect("rpg_market")
+
+        # Transferir monedas
+        buyer_profile.coins -= listing.price_coins
+        seller_profile.coins += listing.price_coins
+        buyer_profile.save()
+        seller_profile.save()
+
+        # Transferir objeto
+        item = listing.item
+        item.owner = request.user
+        item.save()
+
+        # Cerrar listing
+        listing.is_active = False
+        listing.buyer = request.user
+        listing.save()
+
+    messages.success(
+        request,
+        f"Has comprado {item.name} por {listing.price_coins} monedas."
+    )
+    return redirect("rpg_market")

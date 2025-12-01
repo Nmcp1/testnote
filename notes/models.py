@@ -527,3 +527,31 @@ class MiniBossParticipant(models.Model):
 
     def __str__(self):
         return f"{self.user.username} en lobby {self.lobby_id}"
+
+class MarketListing(models.Model):
+    item = models.OneToOneField(
+        CombatItem,
+        on_delete=models.CASCADE,
+        related_name="market_listing",
+    )
+    seller = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="market_listings",
+    )
+    buyer = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="purchased_listings",
+    )
+    price_coins = models.PositiveIntegerField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.item.name} por {self.price_coins} monedas ({self.seller.username})"
