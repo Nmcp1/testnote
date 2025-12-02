@@ -124,11 +124,23 @@
               <span class="text-muted">—</span>
             {% endif %}
           </p>
-          <p class="mb-0">
+          <p class="mb-1">
             Amuleto 3:
             {% if profile.equipped_amulet3 %}
               <span class="rarity-{{ profile.equipped_amulet3.rarity }}">
                 {{ profile.equipped_amulet3.name }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </p>
+
+          <!-- Mascota -->
+          <p class="mb-0">
+            Mascota:
+            {% if profile.equipped_pet %}
+              <span class="rarity-{{ profile.equipped_pet.rarity }}">
+                {{ profile.equipped_pet.name }}
               </span>
             {% else %}
               <span class="text-muted">—</span>
@@ -144,7 +156,6 @@
   <div class="col-lg-9">
     <div class="card shadow-sm">
       <div class="card-body">
-
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
           <h5 class="fw-bold mb-0">Objetos en tu inventario</h5>
 
@@ -160,6 +171,7 @@
               <option value="boots" {% if slot_filter == "boots" %}selected{% endif %}>Botas</option>
               <option value="shield" {% if slot_filter == "shield" %}selected{% endif %}>Escudo</option>
               <option value="amulet" {% if slot_filter == "amulet" %}selected{% endif %}>Amuletos</option>
+              <option value="pet" {% if slot_filter == "pet" %}selected{% endif %}>Mascotas</option>
             </select>
           </form>
         </div>
@@ -182,7 +194,6 @@
             {% for item in items %}
               <tr>
                 <td>
-                  <!-- checkbox ligado al formulario de venta múltiple -->
                   <input type="checkbox"
                          form="bulk-sell-form"
                          name="selected_items"
@@ -225,7 +236,8 @@
                   {% endif %}
                 </td>
                 <td class="text-end">
-                  <!-- Formulario para equipar (independiente del de venta) -->
+
+                  <!-- Formulario para equipar -->
                   <form method="post" class="d-inline-block">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="equip">
@@ -243,6 +255,7 @@
                       Equipar
                     </button>
                   </form>
+
                 </td>
               </tr>
             {% endfor %}
@@ -250,7 +263,7 @@
           </table>
         </div>
 
-        <!-- Formulario de venta múltiple (separado, sin forms anidados) -->
+        <!-- Formulario de venta múltiple -->
         <form id="bulk-sell-form" method="post" class="mt-2">
           {% csrf_token %}
           <input type="hidden" name="action" value="sell_bulk">

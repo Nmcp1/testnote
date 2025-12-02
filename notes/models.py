@@ -161,6 +161,11 @@ class UserProfile(models.Model):
         'CombatItem', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='+'
     )
+    
+    equipped_pet = models.ForeignKey(
+        'CombatItem', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+'
+    )
 
     def __str__(self):
         return f"Perfil de {self.user.username} (monedas: {self.coins})"
@@ -205,6 +210,7 @@ class ItemSlot(models.TextChoices):
     BOOTS = "boots", "Botas"
     SHIELD = "shield", "Escudo"
     AMULET = "amulet", "Amuleto"
+    PET = "pet", "Mascota" 
 
 
 class ItemSource(models.TextChoices):
@@ -230,6 +236,10 @@ class CombatItem(models.Model):
     crit_chance = models.FloatField(default=0.0)
     dodge_chance = models.FloatField(default=0.0)
     speed = models.IntegerField(default=0)
+
+    hp_pct = models.FloatField(default=0.0)
+    attack_pct = models.FloatField(default=0.0)
+    defense_pct = models.FloatField(default=0.0)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

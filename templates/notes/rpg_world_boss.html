@@ -2,6 +2,17 @@
 {% load tz %}
 {% block content %}
 
+<style>
+  /* Colores por rareza (para la mascota equipada) */
+  .rarity-basic { color: #9e9e9e; }
+  .rarity-uncommon { color: #4caf50; }
+  .rarity-special { color: #2196f3; }
+  .rarity-epic { color: #9c27b0; }
+  .rarity-legendary { color: #ffeb3b; font-weight: bold; }
+  .rarity-mythic { color: #f44336; font-weight: bold; }
+  .rarity-ascended { color: #e91e63; font-weight: bold; }
+</style>
+
 <h2 class="fw-bold mb-3">World Boss — Batalla global</h2>
 
 <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
@@ -60,6 +71,18 @@
         <h6 class="fw-bold" style="font-size: 0.9rem;">Tu estado</h6>
         <p class="mb-1" style="font-size: 0.9rem;">
           Monedas: <strong>{{ profile.coins }}</strong>
+        </p>
+
+        <!-- Mascota equipada del jugador -->
+        <p class="mb-2" style="font-size: 0.9rem;">
+          Mascota equipada:
+          {% if profile.equipped_pet %}
+            <span class="rarity-{{ profile.equipped_pet.rarity }}">
+              {{ profile.equipped_pet.name }}
+            </span>
+          {% else %}
+            <span class="text-muted">Ninguna</span>
+          {% endif %}
         </p>
 
         {% if participation %}

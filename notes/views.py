@@ -580,6 +580,16 @@ SLOT_LABELS = {
     ItemSlot.AMULET: "Amuleto",
 }
 
+GACHA_SLOTS = [
+    ItemSlot.WEAPON,
+    ItemSlot.HELMET,
+    ItemSlot.ARMOR,
+    ItemSlot.PANTS,
+    ItemSlot.BOOTS,
+    ItemSlot.SHIELD,
+    ItemSlot.AMULET,
+]
+
 # Tablas de stats por rareza
 WEAPON_ATK = {
     ItemRarity.BASIC: (5, 15),
@@ -965,8 +975,22 @@ def rpg_gacha(request):
     auto_sold = False
     auto_sell_gain = 0
 
+    # Slots permitidos en ESTE gacha (sin mascotas)
+    GACHA_SLOTS = {
+        ItemSlot.WEAPON,
+        ItemSlot.HELMET,
+        ItemSlot.ARMOR,
+        ItemSlot.PANTS,
+        ItemSlot.BOOTS,
+        ItemSlot.SHIELD,
+        ItemSlot.AMULET,
+    }
+    GACHA_SLOT_VALUES = {s.value for s in GACHA_SLOTS}
+
     # Último slot usado en el gacha (para que no se reseteé al refrescar)
     last_slot = request.session.get("rpg_gacha_last_slot", ItemSlot.WEAPON.value)
+    if last_slot not in GACHA_SLOT_VALUES:
+        last_slot = ItemSlot.WEAPON.value
 
     # --- Preferencias de auto vender del usuario ---
     auto_sell_set = set()
@@ -1005,10 +1029,20 @@ def rpg_gacha(request):
         # ----------------------------------------
         elif action == "roll":
             slot_code = request.POST.get("slot", last_slot)
+
+            # Validar que el slot sea válido como enum
             try:
                 slot = ItemSlot(slot_code)
             except ValueError:
                 messages.error(request, "Slot inválido.")
+                return redirect("rpg_gacha")
+
+            # Evitar que se use un slot que no pertenece al gacha (ej: PET)
+            if slot not in GACHA_SLOTS:
+                messages.error(
+                    request,
+                    "Este tipo de equipamiento no puede salir en este gacha."
+                )
                 return redirect("rpg_gacha")
 
             # Guardar en sesión el último slot seleccionado
@@ -1021,7 +1055,7 @@ def rpg_gacha(request):
                 return redirect("rpg_gacha")
 
             # Determinar rareza según las probabilidades configuradas
-            rarity = roll_rarity()
+            rarity = roll_rarity()  # rarity es el código: "basic", "epic", etc.
             stats = generate_item_stats(slot, rarity, from_gacha=True)
             name = f"{SLOT_LABELS[slot]} {ItemRarity(rarity).label}"
 
@@ -1060,7 +1094,6 @@ def rpg_gacha(request):
                 # Eliminamos el ítem del inventario
                 item.delete()
 
-
                 # No mostramos detalle del ítem porque ya no existe
                 rolled_item = None
                 rolled_rarity = rarity
@@ -1068,7 +1101,6 @@ def rpg_gacha(request):
                 # Ítem se conserva normalmente
                 rolled_item = item
                 rolled_rarity = rarity
-
 
     # Tabla de probabilidades para mostrar en la UI
     probs = get_gacha_probs()
@@ -1207,12 +1239,13 @@ def rpg_inventory(request):
 
     items = items_qs
 
-    # IDs equipados para marcar en la tabla
+    # IDs equipados para marcar en la tabla (incluyendo mascota)
     equipped_ids = set()
     for field in [
         "equipped_weapon", "equipped_helmet", "equipped_armor",
         "equipped_pants", "equipped_boots", "equipped_shield",
         "equipped_amulet1", "equipped_amulet2", "equipped_amulet3",
+        "equipped_pet",
     ]:
         it = getattr(profile, field, None)
         if it:
@@ -1256,6 +1289,9 @@ def rpg_inventory(request):
                 else:
                     profile.equipped_amulet3 = item
                     messages.success(request, f"Has equipado {item.name} en Amuleto 3.")
+            elif item.slot == ItemSlot.PET:
+                profile.equipped_pet = item
+                messages.success(request, f"Has equipado a {item.name} como mascota.")
 
             profile.save()
             return redirect("rpg_inventory")
@@ -1294,7 +1330,7 @@ def rpg_inventory(request):
             for it in items_to_sell:
                 price = rarity_prices.get(it.rarity, 0)
 
-                # si está equipado en algún slot, lo des-equipamos
+                # si está equipado en algún slot, lo des-equipamos (incluyendo mascota)
                 if profile.equipped_weapon_id == it.id:
                     profile.equipped_weapon = None
                 if profile.equipped_helmet_id == it.id:
@@ -1313,6 +1349,8 @@ def rpg_inventory(request):
                     profile.equipped_amulet2 = None
                 if profile.equipped_amulet3_id == it.id:
                     profile.equipped_amulet3 = None
+                if getattr(profile, "equipped_pet_id", None) == it.id:
+                    profile.equipped_pet = None
 
                 total_coins += price
                 sold_count += 1
@@ -1337,6 +1375,7 @@ def rpg_inventory(request):
         "equipped_weapon", "equipped_helmet", "equipped_armor",
         "equipped_pants", "equipped_boots", "equipped_shield",
         "equipped_amulet1", "equipped_amulet2", "equipped_amulet3",
+        "equipped_pet",
     ]:
         it = getattr(profile, field, None)
         if it:
@@ -1350,7 +1389,6 @@ def rpg_inventory(request):
         "slot_filter": slot_filter,
     }
     return render(request, "notes/rpg_inventory.html", context)
-
 
 
 
@@ -1604,6 +1642,7 @@ def rpg_pvp_arena(request):
             p.equipped_amulet1,
             p.equipped_amulet2,
             p.equipped_amulet3,
+            getattr(p, "equipped_pet", None),
         ])
 
         # ¿O stats distintos a los básicos?

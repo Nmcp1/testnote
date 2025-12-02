@@ -78,6 +78,17 @@
         <p class="hub-small-text">CRIT: <strong>{{ stats.crit_chance }}%</strong></p>
         <p class="hub-small-text">ESQ: <strong>{{ stats.dodge_chance }}%</strong></p>
         <p class="hub-small-text mb-1">VEL: <strong>{{ stats.speed }}</strong></p>
+
+        <!-- NUEVO: Mascota equipada -->
+        <hr class="my-1">
+        <p class="hub-small-text mb-0">
+          🐾 Mascota:
+          {% if profile.equipped_pet %}
+            <strong>{{ profile.equipped_pet.name }}</strong>
+          {% else %}
+            <span class="text-muted">Sin mascota equipada</span>
+          {% endif %}
+        </p>
       </div>
 
       <!-- Gestión rápida -->

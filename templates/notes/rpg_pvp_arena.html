@@ -32,7 +32,8 @@
 
         <p class="mb-1">Usuario: <strong>{{ request.user.username }}</strong></p>
         <p class="mb-1">Puesto actual: <strong>#{{ my_rank.position }}</strong></p>
-        <p class="mb-3">Monedas actuales: <strong>{{ profile.coins }}</strong></p>
+        <p class="mb-1">Monedas actuales: <strong>{{ profile.coins }}</strong></p>
+        <p class="mb-3">Rubíes: <strong>{{ profile.rubies }}</strong></p>
 
         <h6 class="fw-bold mb-1">Tus estadísticas</h6>
         <p class="mb-1" style="font-size: 0.85rem;">Vida: <strong>{{ stats.hp }}</strong></p>
@@ -40,7 +41,19 @@
         <p class="mb-1" style="font-size: 0.85rem;">Defensa: <strong>{{ stats.defense }}</strong></p>
         <p class="mb-1" style="font-size: 0.85rem;">Crítico: <strong>{{ stats.crit_chance }}%</strong></p>
         <p class="mb-1" style="font-size: 0.85rem;">Esquive: <strong>{{ stats.dodge_chance }}%</strong></p>
-        <p class="mb-3" style="font-size: 0.85rem;">Velocidad: <strong>{{ stats.speed }}</strong></p>
+        <p class="mb-2" style="font-size: 0.85rem;">Velocidad: <strong>{{ stats.speed }}</strong></p>
+
+        <!-- Mascota del jugador -->
+        <p class="mb-3" style="font-size: 0.85rem;">
+          🐾 Mascota:
+          {% if profile.equipped_pet %}
+            <span class="rarity-{{ profile.equipped_pet.rarity }}">
+              {{ profile.equipped_pet.name }}
+            </span>
+          {% else %}
+            <span class="text-muted">Sin mascota equipada</span>
+          {% endif %}
+        </p>
 
         <hr class="my-2">
 
@@ -148,6 +161,13 @@
                   {% if p.equipped_amulet3 %}
                     <span class="rarity-{{ p.equipped_amulet3.rarity }}">
                       {{ p.equipped_amulet3.name }}
+                    </span><br>
+                  {% endif %}
+
+                  {# Mascota del rival #}
+                  {% if p.equipped_pet %}
+                    <span class="rarity-{{ p.equipped_pet.rarity }}">
+                      🐾 {{ p.equipped_pet.name }}
                     </span><br>
                   {% endif %}
 
