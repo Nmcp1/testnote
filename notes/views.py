@@ -578,6 +578,7 @@ SLOT_LABELS = {
     ItemSlot.BOOTS: "Botas",
     ItemSlot.SHIELD: "Escudo",
     ItemSlot.AMULET: "Amuleto",
+    ItemSlot.PET: "Mascota",
 }
 
 GACHA_SLOTS = [
@@ -760,6 +761,43 @@ def generate_item_stats(slot, rarity, from_gacha):
         "speed": speed,
     }
 
+# =======================
+#  PETS: porcentajes
+# =======================
+
+PET_PERCENT_CONFIG = {
+    ItemRarity.BASIC:     (1, 3, 5),   # 1 stat, 3–5%
+    ItemRarity.UNCOMMON:  (2, 5, 8),   # 2 stats, 5–8%
+    ItemRarity.SPECIAL:   (2, 8, 12),  # 2 stats, 8–12%
+    ItemRarity.EPIC:      (3, 12, 15), # 3 stats, 12–15%
+    ItemRarity.LEGENDARY: (3, 15, 20), # 3 stats, 15–20%
+    ItemRarity.MYTHIC:    (3, 20, 30), # 3 stats, 20–30%
+    ItemRarity.ASCENDED:  (3, 30, 50), # 3 stats, 30–50%
+}
+
+
+def generate_pet_percents(rarity: ItemRarity):
+    """
+    Genera porcentajes para mascotas según rareza.
+    Devuelve un dict con attack_pct, defense_pct, hp_pct.
+    """
+    count, mn, mx = PET_PERCENT_CONFIG[rarity]
+    # stats posibles
+    stat_names = ["attack_pct", "defense_pct", "hp_pct"]
+
+    # por defecto todo 0
+    result = {
+        "attack_pct": 0.0,
+        "defense_pct": 0.0,
+        "hp_pct": 0.0,
+    }
+
+    # elegimos qué stats se buffean
+    chosen = random.sample(stat_names, count)
+    for name in chosen:
+        result[name] = random.uniform(mn, mx)
+
+    return result
 
 
 def get_total_stats(user):
@@ -800,6 +838,24 @@ def get_total_stats(user):
             total_crit += item.crit_chance
             total_dodge += item.dodge_chance
             total_speed += item.speed
+        # -------------------------
+    # 2) Aplicar mascota (%)
+    # -------------------------
+    pet = getattr(profile, "equipped_pet", None)
+    if pet:
+        # Nos aseguramos de que existan los campos, con 0 por defecto
+        hp_pct = getattr(pet, "hp_pct", 0.0) or 0.0
+        atk_pct = getattr(pet, "attack_pct", 0.0) or 0.0
+        def_pct = getattr(pet, "defense_pct", 0.0) or 0.0
+
+        # Bonus en función de los stats YA SUMADOS
+        bonus_hp = int(total_hp * (hp_pct / 100.0))
+        bonus_atk = int(total_atk * (atk_pct / 100.0))
+        bonus_def = int(total_def * (def_pct / 100.0))
+
+        total_hp += bonus_hp
+        total_atk += bonus_atk
+        total_def += bonus_def
 
     return {
         "hp": total_hp,
@@ -3049,22 +3105,46 @@ def rpg_vip_admin(request):
             if not name:
                 name = f"{SLOT_LABELS[slot]} {rarity.label} VIP"
 
-            # Generar stats fuertes (como gacha)
-            stats = generate_item_stats(slot, rarity, from_gacha=True)
-
-            item = CombatItem.objects.create(
-                owner=request.user,
-                name=name,
-                slot=slot,
-                rarity=rarity,
-                source=ItemSource.SHOP,
-                attack=stats["attack"],
-                defense=stats["defense"],
-                hp=stats["hp"],
-                crit_chance=stats["crit_chance"],
-                dodge_chance=stats["dodge_chance"],
-                speed=stats["speed"],
-            )
+            # ============================
+            # Generar stats del ítem
+            # ============================
+            if slot == ItemSlot.PET:
+                # Mascotas: usan porcentajes en lugar de stats planos
+                pet_stats = generate_pet_percents(rarity)
+                item = CombatItem.objects.create(
+                    owner=request.user,
+                    name=name,
+                    slot=slot,
+                    rarity=rarity,
+                    source=ItemSource.SHOP,
+                    # stats planos en 0
+                    attack=0,
+                    defense=0,
+                    hp=0,
+                    crit_chance=0,
+                    dodge_chance=0,
+                    speed=0,
+                    # porcentajes
+                    attack_pct=pet_stats["attack_pct"],
+                    defense_pct=pet_stats["defense_pct"],
+                    hp_pct=pet_stats["hp_pct"],
+                )
+            else:
+                # Resto de ítems: como antes (stats normales)
+                stats = generate_item_stats(slot, rarity, from_gacha=True)
+                item = CombatItem.objects.create(
+                    owner=request.user,
+                    name=name,
+                    slot=slot,
+                    rarity=rarity,
+                    source=ItemSource.SHOP,
+                    attack=stats["attack"],
+                    defense=stats["defense"],
+                    hp=stats["hp"],
+                    crit_chance=stats["crit_chance"],
+                    dodge_chance=stats["dodge_chance"],
+                    speed=stats["speed"],
+                )
 
             VipShopOffer.objects.create(
                 offer_type=VipShopOffer.TYPE_ITEM,

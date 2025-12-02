@@ -66,14 +66,25 @@
             <p class="mb-1">
               Tipo: {{ offer.item.get_slot_display }}
             </p>
-            <p class="mb-1" style="font-size: 0.85rem;">
-              ATK {{ offer.item.attack }} |
-              DEF {{ offer.item.defense }} |
-              HP {{ offer.item.hp }}<br>
-              CRIT {{ offer.item.crit_chance }}% |
-              ESQ {{ offer.item.dodge_chance }}% |
-              VEL {{ offer.item.speed }}
-            </p>
+
+            {# ---------- STATS: ÍTEM NORMAL vs MASCOTA ---------- #}
+            {% if offer.item.slot == "pet" %}
+              <p class="mb-1" style="font-size: 0.85rem;">
+                ATK +{{ offer.item.attack_pct|floatformat:0 }}% |
+                DEF +{{ offer.item.defense_pct|floatformat:0 }}% |
+                HP +{{ offer.item.hp_pct|floatformat:0 }}%
+              </p>
+            {% else %}
+              <p class="mb-1" style="font-size: 0.85rem;">
+                ATK {{ offer.item.attack }} |
+                DEF {{ offer.item.defense }} |
+                HP {{ offer.item.hp }}<br>
+                CRIT {{ offer.item.crit_chance }}% |
+                ESQ {{ offer.item.dodge_chance }}% |
+                VEL {{ offer.item.speed }}
+              </p>
+            {% endif %}
+
           {% elif offer.offer_type == "rubies" %}
             <h5 class="fw-bold mb-1">💎 Paquete de rubíes</h5>
             <p class="mb-1">

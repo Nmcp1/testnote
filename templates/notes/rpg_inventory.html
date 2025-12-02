@@ -221,12 +221,18 @@
                   </span>
                 </td>
                 <td style="font-size: 0.8rem;">
-                  ATK {{ item.attack }} |
-                  DEF {{ item.defense }} |
-                  HP {{ item.hp }} |
-                  CRIT {{ item.crit_chance }}% |
-                  ESQ {{ item.dodge_chance }}% |
-                  VEL {{ item.speed }}
+                  {% if item.slot == "pet" %}
+                    ATK +{{ item.attack_pct|floatformat:0 }}% |
+                    DEF +{{ item.defense_pct|floatformat:0 }}% |
+                    HP +{{ item.hp_pct|floatformat:0 }}%
+                  {% else %}
+                    ATK {{ item.attack }} |
+                    DEF {{ item.defense }} |
+                    HP {{ item.hp }} |
+                    CRIT {{ item.crit_chance }}% |
+                    ESQ {{ item.dodge_chance }}% |
+                    VEL {{ item.speed }}
+                  {% endif %}
                 </td>
                 <td class="text-center">
                   {% if item.id in equipped_ids %}
