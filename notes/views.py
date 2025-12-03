@@ -1890,6 +1890,7 @@ def rpg_trades(request):
         "incoming": incoming,
         "outgoing": outgoing,
     }
+    return render(request, "notes/mantenimiento.html")
     return render(request, "notes/rpg_trades.html", context)
 
 @login_required

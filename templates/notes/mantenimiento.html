@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .maintenance-wrapper {
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  .maintenance-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+  }
+
+  .maintenance-card {
+    max-width: 500px;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    background: #ffffff;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.08);
+  }
+
+  .maintenance-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+
+  .maintenance-text {
+    font-size: 0.95rem;
+    color: #666;
+  }
+</style>
+
+<div class="maintenance-wrapper">
+
+  <div class="maintenance-card">
+    <div class="maintenance-icon">🛠️</div>
+
+    <h2 class="maintenance-title">Funcionalidad en mantenimiento</h2>
+
+    <p class="maintenance-text mt-2">
+      Esta sección se encuentra temporalmente deshabilitada mientras resolvemos
+      un problema técnico.  
+      Estamos trabajando para restaurar el servicio lo antes posible.
+    </p>
+
+    <p class="maintenance-text">
+      Gracias por tu paciencia.
+    </p>
+
+    <a href="{% url 'rpg_hub' %}" class="btn btn-primary rounded-pill mt-3 px-4">
+      ← Volver al menú principal
+    </a>
+  </div>
+
+</div>
+
+{% endblock %}
