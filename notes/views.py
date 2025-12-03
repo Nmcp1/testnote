@@ -39,7 +39,9 @@ from .models import (
     MiniBossParticipant,
     MiniBossLobby,
     MarketListing,
-    VipShopOffer
+    VipShopOffer,
+    Raffle,
+    RaffleEntry,
 
 )
 from .forms import (
@@ -3200,3 +3202,163 @@ def rpg_vip_admin(request):
         "slots": ItemSlot.choices,
     }
     return render(request, "notes/rpg_vip_admin.html", context)
+
+DEFAULT_WINNER_MESSAGE = 'Bienvenidos a Sorteo Mega MIX, inscríbete, es "gratis"'
+@login_required
+def rpg_raffle(request):
+    # Un solo sorteo "global"
+    raffle, _ = Raffle.objects.get_or_create(id=1)
+
+    profile = get_or_create_profile(request.user)
+
+    # ¿Ya estoy inscrito?
+    my_entry = RaffleEntry.objects.filter(raffle=raffle, user=request.user).first()
+
+    # Lista de participantes
+    participants = (
+        RaffleEntry.objects
+        .filter(raffle=raffle)
+        .select_related("user")
+        .order_by("user__username")
+    )
+
+    is_superuser = request.user.is_superuser
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        # -------------------------------------------------
+        # Acciones SOLO del superusuario
+        # -------------------------------------------------
+        if is_superuser and action in {"update_note", "update_price", "set_weight", "start", "reset"}:
+            # Editar nota del admin
+            if action == "update_note":
+                raffle.note = request.POST.get("note", "").strip()
+                raffle.save()
+                messages.success(request, "Nota del sorteo actualizada.")
+                return redirect("rpg_raffle")
+
+            # Editar precio de participación
+            if action == "update_price":
+                try:
+                    price = int(request.POST.get("participation_price", "0"))
+                    if price < 0:
+                        price = 0
+                except ValueError:
+                    price = 0
+                raffle.participation_price = price
+                raffle.save()
+                messages.success(request, "Precio de participación actualizado.")
+                return redirect("rpg_raffle")
+
+            # Cambiar peso de un participante concreto
+            if action == "set_weight":
+                entry_id = request.POST.get("entry_id")
+                try:
+                    new_weight = int(request.POST.get("weight", "1"))
+                    if new_weight < 1:
+                        new_weight = 1
+                except ValueError:
+                    new_weight = 1
+
+                entry = get_object_or_404(RaffleEntry, pk=entry_id, raffle=raffle)
+                entry.weight = new_weight
+                entry.save()
+                messages.success(
+                    request,
+                    f"Peso de {entry.user.username} actualizado a x{entry.weight}."
+                )
+                return redirect("rpg_raffle")
+
+            # Iniciar / resolver el sorteo (elegir ganador)
+            if action == "start":
+                if raffle.status != Raffle.STATUS_WAITING:
+                    messages.error(request, "Este sorteo ya fue finalizado.")
+                    return redirect("rpg_raffle")
+
+                entries = list(RaffleEntry.objects.filter(raffle=raffle))
+                if not entries:
+                    messages.error(request, "No hay participantes en el sorteo.")
+                    return redirect("rpg_raffle")
+
+                # sorteo ponderado por weight
+                total_weight = sum(e.weight for e in entries)
+                r = random.randint(1, total_weight)
+                acumulado = 0
+                winner_entry = None
+                for e in entries:
+                    acumulado += e.weight
+                    if r <= acumulado:
+                        winner_entry = e
+                        break
+
+                if winner_entry is None:  # fallback raro
+                    winner_entry = entries[-1]
+
+                raffle.winner = winner_entry.user
+                raffle.status = Raffle.STATUS_FINISHED
+                raffle.finished_at = timezone.now()
+                raffle.save()
+
+                messages.success(
+                    request,
+                    f"Ganador seleccionado: {winner_entry.user.username}. "
+                    "Entrega el premio manualmente."
+                )
+                # Aquí PODRÍAS enviar Notification al ganador si quieres
+
+                return redirect("rpg_raffle")
+
+            # Reiniciar sorteo (borrar participantes y ganador)
+            if action == "reset":
+                RaffleEntry.objects.filter(raffle=raffle).delete()
+                raffle.winner = None
+                raffle.status = Raffle.STATUS_WAITING
+                raffle.finished_at = None
+                raffle.save()
+                messages.info(request, "El sorteo ha sido reiniciado.")
+                return redirect("rpg_raffle")
+
+        # -------------------------------------------------
+        # Acciones de usuarios normales (inscribirse)
+        # -------------------------------------------------
+        if action == "join":
+            if raffle.status != Raffle.STATUS_WAITING:
+                messages.error(request, "El sorteo ya fue finalizado.")
+                return redirect("rpg_raffle")
+
+            if my_entry:
+                messages.info(request, "Ya estás inscrito en este sorteo.")
+                return redirect("rpg_raffle")
+
+            price = raffle.participation_price or 0
+            if price > 0:
+                if profile.coins < price:
+                    messages.error(request, "No tienes suficientes monedas para participar.")
+                    return redirect("rpg_raffle")
+                profile.coins -= price
+                profile.save()
+
+            RaffleEntry.objects.create(
+                raffle=raffle,
+                user=request.user,
+                weight=1,  # por defecto 1, luego el admin puede editar
+            )
+            messages.success(request, "Te has inscrito en el sorteo.")
+            return redirect("rpg_raffle")
+
+    # Texto a mostrar en la caja de "GANADOR"
+    if raffle.status == Raffle.STATUS_FINISHED and raffle.winner:
+        winner_text = raffle.winner.username
+    else:
+        winner_text = DEFAULT_WINNER_MESSAGE
+
+    context = {
+        "profile": profile,
+        "raffle": raffle,
+        "participants": participants,
+        "my_entry": my_entry,
+        "winner_text": winner_text,
+        "is_superuser": is_superuser,
+    }
+    return render(request, "notes/rpg_raffle.html", context)

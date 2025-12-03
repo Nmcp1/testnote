@@ -36,6 +36,7 @@ urlpatterns = [
 
     path("rpg/vip-shop/", views.rpg_vip_shop, name="rpg_vip_shop"),
     path("rpg/vip-admin/", views.rpg_vip_admin, name="rpg_vip_admin"),
+    path("rpg/sorteo/", views.rpg_raffle, name="rpg_raffle"),
 
     
 ]

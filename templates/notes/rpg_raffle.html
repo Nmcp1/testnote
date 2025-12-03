@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-3">Sorteo</h2>
+
+  <div class="row">
+    <!-- Columna izquierda: nota admin -->
+    <div class="col-md-4">
+      <div class="card mb-3">
+        <div class="card-header">
+          Nota del admin
+        </div>
+        <div class="card-body">
+          {% if is_superuser %}
+            <form method="post" class="mb-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update_note">
+              <textarea name="note" rows="5" class="form-control">{{ raffle.note }}</textarea>
+              <button class="btn btn-sm btn-primary mt-2">Guardar nota</button>
+            </form>
+          {% else %}
+            <pre style="white-space: pre-wrap;">{{ raffle.note }}</pre>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if is_superuser %}
+      <div class="card mb-3">
+        <div class="card-header">Controles admin</div>
+        <div class="card-body">
+          <form method="post" class="mb-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_price">
+            <label>Precio participación (monedas):</label>
+            <input type="number" name="participation_price" class="form-control"
+                   value="{{ raffle.participation_price }}">
+            <button class="btn btn-sm btn-secondary mt-2">Guardar precio</button>
+          </form>
+
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="start">
+            <button class="btn btn-sm btn-success"
+                    {% if raffle.status != "waiting" %}disabled{% endif %}>
+              Iniciar sorteo
+            </button>
+          </form>
+
+          <form method="post" class="d-inline ms-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reset">
+            <button class="btn btn-sm btn-danger">
+              Reiniciar sorteo
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Columna derecha: ganador + participantes -->
+    <div class="col-md-8">
+      <div class="card mb-3">
+        <div class="card-header text-center">
+          Ganador
+        </div>
+        <div class="card-body text-center">
+          <h3>{{ winner_text }}</h3>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header">
+          Participantes (peso)
+        </div>
+        <div class="card-body">
+          {% if participants %}
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Jugador</th>
+                <th>Peso</th>
+                {% if is_superuser %}<th>Editar</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in participants %}
+              <tr>
+                <td>{{ e.user.username }}</td>
+                <td>x{{ e.weight }}</td>
+                {% if is_superuser %}
+                <td>
+                  <form method="post" class="d-flex align-items-center">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="set_weight">
+                    <input type="hidden" name="entry_id" value="{{ e.id }}">
+                    <input type="number" name="weight" value="{{ e.weight }}" min="1"
+                           class="form-control form-control-sm me-2" style="width:80px;">
+                    <button class="btn btn-sm btn-outline-primary">OK</button>
+                  </form>
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+            <p>No hay participantes aún.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Botón de entrar + precio -->
+      <div class="text-center">
+        <p>Precio de participación: {{ raffle.participation_price }} monedas.</p>
+        {% if raffle.status == "waiting" %}
+          {% if my_entry %}
+            <p>Ya estás inscrito en este sorteo ✅</p>
+          {% else %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="join">
+              <button class="btn btn-primary">Entrar al sorteo</button>
+            </form>
+          {% endif %}
+        {% else %}
+          <p>El sorteo ya fue realizado.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Si quieres auto-refresco cada 10 segundos: -->
+<script>
+  setInterval(function() {
+    window.location.reload();
+  }, 10000);
+</script>
+{% endblock %}

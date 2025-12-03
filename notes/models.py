@@ -622,3 +622,65 @@ class VipShopOffer(models.Model):
             return f"VIP: {self.item.name} por {self.price_coins} monedas / {self.price_rubies} rubíes"
         else:
             return f"VIP: {self.ruby_amount} rubíes por {self.price_coins} monedas"
+
+class Raffle(models.Model):
+    STATUS_WAITING = "waiting"   # inscribiéndose
+    STATUS_FINISHED = "finished" # ya se sorteó
+
+    STATUS_CHOICES = [
+        (STATUS_WAITING, "En espera"),
+        (STATUS_FINISHED, "Finalizado"),
+    ]
+
+    title = models.CharField(max_length=100, default="Sorteo Mega MIX")
+    note = models.TextField(
+        default="Premio: por definir.\nEl admin puede editar esta nota."
+    )
+
+    participation_price = models.PositiveIntegerField(
+        default=0,
+        help_text="Precio en monedas por participar."
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_WAITING,
+    )
+
+    winner = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="raffles_won",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.title} ({self.get_status_display()})"
+
+
+class RaffleEntry(models.Model):
+    raffle = models.ForeignKey(
+        Raffle,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="raffle_entries",
+    )
+    weight = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("raffle", "user")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.username} x{self.weight} en {self.raffle.title}"

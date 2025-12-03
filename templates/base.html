@@ -5,14 +5,89 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Muro de Notas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
     <style>
+        body { background-color: #f5f5f5; }
+
+        .navbar { padding-top: 0.35rem; padding-bottom: 0.35rem; }
+
+        /* === BOTONES UNIFORMES DE LA NAVBAR === */
         .nav-pill-btn {
             border-radius: 50px !important;
             font-weight: 700 !important;
             color: white !important;
+
+            width: 140px !important;
+            min-width: 140px !important;
+            max-width: 140px !important;
+
+            height: 38px !important;
+            padding: 0 !important;
+
+            display: inline-flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+
+            border: 1px solid rgba(255,255,255,0.35) !important;
+            background: transparent !important;
+
+            transition: all 0.15s ease;
         }
+
         .nav-pill-btn:hover {
-            opacity: 0.85;
+            opacity: 0.9;
+            background: rgba(255,255,255,0.08) !important;
+            transform: translateY(-1px);
+        }
+
+        /* Botón Juegos ligeramente más ancho */
+        #gamesDropdownBtn {
+            width: 160px !important;
+            min-width: 160px !important;
+            max-width: 160px !important;
+        }
+
+        /* Admin resaltado */
+        .btn-admin {
+            border-color: rgba(255,193,7,0.9) !important;
+        }
+
+        /* Notificaciones igualadas */
+        .btn-notifications {
+            width: 140px !important;
+            min-width: 140px !important;
+            max-width: 140px !important;
+            height: 38px !important;
+
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+
+            border-radius: 50px !important;
+            border: 1px solid rgba(255,255,255,0.35) !important;
+            background: transparent !important;
+            color: white !important;
+        }
+
+        .btn-notifications:hover {
+            background: rgba(255,255,255,0.08) !important;
+        }
+
+        /* Botón salir */
+        .btn-logout {
+            border-radius: 30px !important;
+            padding: 0.35rem 1.2rem !important;
+        }
+
+        .navbar-nav .nav-item {
+            margin-inline: 0.12rem;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 1.2rem;
         }
     </style>
 </head>
@@ -22,7 +97,7 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow mb-4">
     <div class="container">
 
-        <a class="navbar-brand fw-bold fs-4 text-warning" href="{% url 'home' %}">
+        <a class="navbar-brand fw-bold text-warning" href="{% url 'home' %}">
             📒 Muro de Notas
         </a>
 
@@ -35,223 +110,134 @@
 
             <ul class="navbar-nav me-auto">
 
-                <!-- Notas Públicas -->
+                <!-- Públicas -->
                 <li class="nav-item">
-                    <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
-                       href="{% url 'home' %}">
-                        Públicas
-                    </a>
+                    <a class="btn nav-pill-btn" href="{% url 'home' %}">Públicas</a>
                 </li>
 
-                <!-- Notas Privadas -->
+                <!-- Privadas -->
                 {% if user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
-                           href="{% url 'private_notes' %}">
-                            Privadas 🔒
-                        </a>
-                    </li>
+                <li class="nav-item">
+                    <a class="btn nav-pill-btn" href="{% url 'private_notes' %}">Privadas 🔒</a>
+                </li>
                 {% else %}
-                    <li class="nav-item">
-                        <span class="btn btn-secondary mx-1 px-3 nav-pill-btn disabled"
-                              data-bs-toggle="tooltip"
-                              data-bs-title="Entra a una cuenta para ver tus notas privadas">
-                            Privadas 🔒
-                        </span>
-                    </li>
+                <li class="nav-item">
+                    <span class="btn nav-pill-btn btn-secondary disabled">Privadas 🔒</span>
+                </li>
                 {% endif %}
 
-                <!-- Leaderboard monedas -->
+                <!-- Leaderboard -->
                 <li class="nav-item">
-                    <a class="btn btn-outline-light mx-1 px-3 nav-pill-btn"
-                       href="{% url 'leaderboard' %}">
-                        🏆 Leaderboard
-                    </a>
+                    <a class="btn nav-pill-btn" href="{% url 'leaderboard' %}">🏆 Leaderboard</a>
                 </li>
+
+                <!-- Sorteos -->
+                {% if user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="btn nav-pill-btn" href="{% url 'rpg_raffle' %}">🎟️ Sorteos</a>
+                </li>
+                {% endif %}
 
                 <!-- Admin -->
                 {% if is_moderator %}
-                    <li class="nav-item">
-                        <a class="btn btn-outline-warning mx-1 px-3 nav-pill-btn"
-                           href="{% url 'invitation_admin' %}">
-                            Admin
-                        </a>
-                    </li>
+                <li class="nav-item">
+                    <a class="btn nav-pill-btn btn-admin" href="{% url 'invitation_admin' %}">Admin</a>
+                </li>
                 {% endif %}
 
-                <!-- Dropdown Juegos -->
+                <!-- Juegos -->
                 {% if user.is_authenticated %}
                 <li class="nav-item dropdown">
-                    <a class="btn btn-success mx-1 px-3 nav-pill-btn dropdown-toggle"
-                       href="#" id="gamesDropdown"
-                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <a class="btn nav-pill-btn btn-success dropdown-toggle"
+                       id="gamesDropdownBtn"
+                       href="#" data-bs-toggle="dropdown">
                         🎮 Juegos
                     </a>
-                    <ul class="dropdown-menu" aria-labelledby="gamesDropdown">
 
-                        <!-- Minijuego Minas -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'mine_game' %}">
-                                💣 Minijuego de Minas
-                            </a>
-                        </li>
+                    <ul class="dropdown-menu">
 
-                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'mine_game' %}">💣 Minijuego de Minas</a></li>
 
-                        <!-- RPG PvE / Economía -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_hub' %}">
-                                🏠 RPG — Hub
-                            </a>
-                        </li>
+                        <hr class="dropdown-divider">
 
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_tower' %}">
-                                🗼 Torre PvE
-                            </a>
-                        </li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_hub' %}">🏠 RPG — Hub</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_tower' %}">🗼 Torre PvE</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_inventory' %}">🎒 Inventario</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_shop' %}">🛒 Tienda</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_gacha' %}">⭐ Gacha</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_vip_shop' %}">👑 Tienda VIP</a></li>
 
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_inventory' %}">
-                                🎒 Inventario
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_shop' %}">
-                                🛒 Tienda
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_gacha' %}">
-                                ⭐ Gacha
-                            </a>
-                        </li>
-                        <li>
-                        <a class="dropdown-item" href="{% url 'rpg_vip_shop' %}">
-                            👑 Tienda VIP
-                        </a>
-                        </li>
                         {% if user.is_superuser %}
-                        <li>
-                        <a class="dropdown-item text-danger" href="{% url 'rpg_vip_admin' %}">
-                            👑 Admin Tienda VIP
-                        </a>
-                        </li>
+                        <li><a class="dropdown-item text-danger" href="{% url 'rpg_vip_admin' %}">👑 Admin Tienda VIP</a></li>
                         {% endif %}
 
-                        <!-- Mercado -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_market' %}">
-                                🛍️ Mercado Libre
-                            </a>
-                        </li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_market' %}">🛍️ Mercado Libre</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_trades' %}">🔁 Intercambios</a></li>
 
-                        <!-- Intercambios -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_trades' %}">
-                                🔁 Intercambios
-                            </a>
-                        </li>
+                        <hr class="dropdown-divider">
 
-                        <li><hr class="dropdown-divider"></li>
-
-                        <!-- PvP -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_pvp_arena' %}">
-                                ⚔️ Arena PvP
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_pvp_leaderboard' %}">
-                                📈 Ranking PvP
-                            </a>
-                        </li>
-
-                        <!-- World Boss -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_world_boss' %}">
-                                🐲 World Boss
-                            </a>
-                        </li>
-
-                        <!-- Mini Bosses -->
-                        <li>
-                            <a class="dropdown-item" href="{% url 'rpg_miniboss_hub' %}">
-                                👹 Minijefes
-                            </a>
-                        </li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_pvp_arena' %}">⚔️ Arena PvP</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_pvp_leaderboard' %}">📈 Ranking PvP</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_world_boss' %}">🐲 World Boss</a></li>
+                        <li><a class="dropdown-item" href="{% url 'rpg_miniboss_hub' %}">👹 Minijefes</a></li>
 
                         {% if user.is_superuser %}
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item text-danger fw-bold"
+                        <hr class="dropdown-divider">
+                        <li><a class="dropdown-item text-danger fw-bold"
                                href="{% url 'rpg_gacha_config' %}">
                                 ⚙️ Configurar Probabilidades Gacha
-                            </a>
-                        </li>
+                        </a></li>
                         {% endif %}
                     </ul>
                 </li>
                 {% endif %}
-
             </ul>
 
-            <!-- Zona derecha del navbar -->
+            <!-- Derecha -->
             <ul class="navbar-nav ms-auto">
                 {% if user.is_authenticated %}
 
-                    <!-- Notificaciones -->
-                    <li class="nav-item mx-1">
-                        <a href="{% url 'notifications' %}"
-                           class="btn {% if unread_notifications_count > 0 %}btn-danger{% else %}btn-outline-light{% endif %} rounded-pill position-relative">
-                            Notificaciones
-                            {% if unread_notifications_count > 0 %}
-                              <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
-                                {{ unread_notifications_count }}
-                              </span>
-                            {% endif %}
-                        </a>
-                    </li>
-
-                    <!-- Rubíes -->
-                    <li class="nav-item d-flex align-items-center mx-2">
-                        <span class="fw-bold" style="color:#ff4dd2;">
-                            ♦️ {{ user_rubies|default:"0" }}
+                <!-- Notificaciones -->
+                <li class="nav-item">
+                    <a href="{% url 'notifications' %}"
+                       class="btn btn-notifications position-relative">
+                        Notificaciones
+                        {% if unread_notifications_count > 0 %}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
+                            {{ unread_notifications_count }}
                         </span>
-                    </li>
+                        {% endif %}
+                    </a>
+                </li>
 
-                    <!-- Monedas -->
-                    <li class="nav-item d-flex align-items-center mx-2">
-                        <span class="text-warning fw-bold">
-                            🪙 {{ user_coins|default:"0" }}
-                        </span>
-                    </li>
+                <li class="nav-item d-flex align-items-center mx-2">
+                    <span class="fw-bold" style="color:#ff4dd2;">♦️ {{ user_rubies }}</span>
+                </li>
 
-                    <!-- Nombre -->
-                    <li class="nav-item d-flex align-items-center mx-2">
-                        <span class="text-white">👤 {{ user.username }}</span>
-                    </li>
+                <li class="nav-item d-flex align-items-center mx-2">
+                    <span class="text-warning fw-bold">🪙 {{ user_coins }}</span>
+                </li>
 
-                    <!-- Salir -->
-                    <li class="nav-item">
-                        <form method="post" action="{% url 'logout' %}">
-                            {% csrf_token %}
-                            <button class="btn btn-danger rounded-pill">Salir</button>
-                        </form>
-                    </li>
+                <li class="nav-item d-flex align-items-center mx-2">
+                    <span class="text-white">👤 {{ user.username }}</span>
+                </li>
+
+                <li class="nav-item">
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button class="btn btn-danger btn-logout">Salir</button>
+                    </form>
+                </li>
 
                 {% else %}
-                    <li class="nav-item mx-1">
-                        <a class="btn btn-outline-light rounded-pill" href="{% url 'login' %}">Entrar</a>
-                    </li>
-                    <li class="nav-item mx-1">
-                        <a class="btn btn-light text-dark rounded-pill" href="{% url 'register' %}">
-                            Registrarse
-                        </a>
-                    </li>
+
+                <li class="nav-item">
+                    <a class="btn nav-pill-btn" href="{% url 'login' %}">Entrar</a>
+                </li>
+                <li class="nav-item">
+                    <a class="btn nav-pill-btn" href="{% url 'register' %}">Registrarse</a>
+                </li>
+
                 {% endif %}
             </ul>
 
@@ -262,14 +248,14 @@
 <div class="container">
 
     {% if messages and not hide_messages %}
-      <div class="mb-3">
+    <div class="mb-3">
         {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
             {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-          </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
         {% endfor %}
-      </div>
+    </div>
     {% endif %}
 
     {% block content %}{% endblock %}
@@ -278,10 +264,10 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const tList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-        [...tList].map(el => new bootstrap.Tooltip(el));
-    });
+document.addEventListener('DOMContentLoaded', () => {
+    const tList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    [...tList].map(el => new bootstrap.Tooltip(el));
+});
 </script>
 
 </body>
