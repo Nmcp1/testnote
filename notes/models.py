@@ -385,6 +385,10 @@ class Trade(models.Model):
         default=STATUS_PENDING,
     )
 
+    # ✅ Confirmaciones de cada lado (lo que usan tus views)
+    from_confirmed = models.BooleanField(default=False)
+    to_confirmed = models.BooleanField(default=False)
+
     # Monedas que pone cada lado
     from_coins = models.PositiveIntegerField(
         default=0,
@@ -397,12 +401,12 @@ class Trade(models.Model):
 
     # Objetos que pone cada lado (máx 10 en total, se valida en la vista)
     offered_from = models.ManyToManyField(
-        CombatItem,
+        "CombatItem",
         blank=True,
         related_name="trades_offered_from",
     )
     offered_to = models.ManyToManyField(
-        CombatItem,
+        "CombatItem",
         blank=True,
         related_name="trades_offered_to",
     )
@@ -418,17 +422,62 @@ class Trade(models.Model):
         related_name="trades_last_actor",
     )
 
-    def total_items(self):
+    # ==== Helpers de lógica de negocio ====
+
+    def total_items(self) -> int:
         return self.offered_from.count() + self.offered_to.count()
 
-    def is_pending(self):
+    def is_pending(self) -> bool:
         return self.status == self.STATUS_PENDING
 
+    def is_party(self, user) -> bool:
+        """Indica si el usuario participa en este trade (from o to)."""
+        return user == self.from_user or user == self.to_user
+
     def other_user(self, user):
-        return self.to_user if user == self.from_user else self.from_user
+        """Devuelve la otra parte del intercambio."""
+        if user == self.from_user:
+            return self.to_user
+        if user == self.to_user:
+            return self.from_user
+        return None
+
+    def reset_confirmations(self):
+        """Resetea las confirmaciones de ambos lados (se usa al cambiar la oferta)."""
+        self.from_confirmed = False
+        self.to_confirmed = False
+
+    def mark_confirmed(self, user):
+        """Marca la confirmación del lado correspondiente."""
+        if user == self.from_user:
+            self.from_confirmed = True
+        elif user == self.to_user:
+            self.to_confirmed = True
+        else:
+            raise ValueError("Usuario no pertenece a este intercambio.")
+        self.last_actor = user
+
+    def mark_unconfirmed(self, user):
+        """Quita la confirmación del lado correspondiente."""
+        if user == self.from_user:
+            self.from_confirmed = False
+        elif user == self.to_user:
+            self.to_confirmed = False
+        else:
+            raise ValueError("Usuario no pertenece a este intercambio.")
+        self.last_actor = user
+
+    def both_confirmed(self) -> bool:
+        return self.from_confirmed and self.to_confirmed
+
+    def can_be_finalized(self) -> bool:
+        """Solo puede completarse si está pendiente y ambas partes confirmaron."""
+        return self.status == self.STATUS_PENDING and self.both_confirmed()
 
     def __str__(self):
         return f"Trade #{self.pk} {self.from_user} ↔ {self.to_user} ({self.status})"
+
+
 
 class WorldBossCycle(models.Model):
     """

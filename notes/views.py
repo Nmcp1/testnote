@@ -1288,7 +1288,7 @@ def rpg_inventory(request):
         CombatItem.objects
         .filter(owner=request.user)
         .exclude(market_listing__is_active=True)  # no mostrar si está en venta
-        .order_by("-created_at")
+        .order_by("-rarity", "-created_at")
     )
 
     valid_slots = {s.value for s in ItemSlot}
@@ -1892,7 +1892,7 @@ def rpg_trades(request):
         "incoming": incoming,
         "outgoing": outgoing,
     }
-    return render(request, "notes/mantenimiento.html")
+    #return render(request, "notes/mantenimiento.html")
     return render(request, "notes/rpg_trades.html", context)
 
 @login_required
@@ -1971,249 +1971,205 @@ def rpg_trade_create(request):
 
 @login_required
 def rpg_trade_detail(request, trade_id):
-    """
-    Detalle de un intercambio:
-    - Ambos jugadores pueden hacer contra-oferta (editar monedas/objetos) mientras esté pendiente.
-    - Cualquiera de los dos puede ACEPTAR (se ejecuta el intercambio).
-    - El receptor puede RECHAZAR; el emisor puede CANCELAR.
-    """
     trade = get_object_or_404(
         Trade.objects.select_related("from_user", "to_user"),
         pk=trade_id,
     )
 
-    if request.user not in (trade.from_user, trade.to_user):
-        return HttpResponseForbidden("No puedes ver este intercambio.")
+    # Solo participantes (o superuser) pueden ver
+    if not trade.is_party(request.user) and not request.user.is_superuser:
+        return HttpResponseForbidden("No eres parte de este intercambio.")
 
-    me = request.user
-    other = trade.other_user(me)
-
-    my_profile = get_or_create_profile(me)
-    other_profile = get_or_create_profile(other)
-
-    my_items = CombatItem.objects.filter(owner=me).order_by("-created_at")
-    other_items = CombatItem.objects.filter(owner=other).order_by("-created_at")
-
-    is_from_side = (me == trade.from_user)
-
-    if request.method == "POST" and trade.is_pending():
+    if request.method == "POST":
         action = request.POST.get("action")
 
-        # Helper para parsear ints >= 0
-        def parse_int(value, default=0):
-            try:
-                return max(0, int(value))
-            except (TypeError, ValueError):
-                return default
+        # Atajos
+        is_from = (request.user == trade.from_user)
+        is_to = (request.user == trade.to_user)
 
-        # --------------------------
-        # ACEPTAR INTERCAMBIO
-        # --------------------------
-        if action == "accept":
-            try:
-                with transaction.atomic():
-                    # Refrescar perfiles
-                    my_profile = get_or_create_profile(me)
-                    other_profile = get_or_create_profile(other)
+        # No tocar trades ya cerrados
+        if trade.status != Trade.STATUS_PENDING and action not in ("view",):
+            messages.error(request, "Este intercambio ya fue cerrado.")
+            return redirect("rpg_trade_detail", trade_id=trade.id)
 
-                    # Comprobar que ambos tienen las monedas suficientes
-                    if my_profile.coins < (trade.from_coins if is_from_side else trade.to_coins):
-                        messages.error(
-                            request,
-                            "No tienes suficientes monedas para completar el intercambio."
-                        )
-                        return redirect("rpg_trade_detail", trade_id=trade.id)
+        # ----------------------------
+        # Confirmar / desconfirmar
+        # ----------------------------
+        if action == "confirm":
+            trade.mark_confirmed(request.user)
+            trade.save(update_fields=["from_confirmed", "to_confirmed", "last_actor", "updated_at"])
+            messages.success(request, "Has confirmado el intercambio. Falta que la otra parte confirme.")
+            return redirect("rpg_trade_detail", trade_id=trade.id)
 
-                    if other_profile.coins < (trade.to_coins if is_from_side else trade.from_coins):
-                        messages.error(
-                            request,
-                            f"{other.username} no tiene suficientes monedas para completar el intercambio."
-                        )
-                        return redirect("rpg_trade_detail", trade_id=trade.id)
+        if action == "unconfirm":
+            trade.mark_unconfirmed(request.user)
+            trade.save(update_fields=["from_confirmed", "to_confirmed", "last_actor", "updated_at"])
+            messages.info(request, "Has quitado tu confirmación.")
+            return redirect("rpg_trade_detail", trade_id=trade.id)
 
-                    # Comprobar propiedad de los ítems
-                    for item in trade.offered_from.all():
-                        if item.owner != trade.from_user:
-                            messages.error(
-                                request,
-                                f"El objeto {item.name} ya no pertenece a {trade.from_user.username}."
-                            )
-                            return redirect("rpg_trade_detail", trade_id=trade.id)
-
-                    for item in trade.offered_to.all():
-                        if item.owner != trade.to_user:
-                            messages.error(
-                                request,
-                                f"El objeto {item.name} ya no pertenece a {trade.to_user.username}."
-                            )
-                            return redirect("rpg_trade_detail", trade_id=trade.id)
-
-                    # Límite de 10 objetos total
-                    if trade.total_items() > 10:
-                        messages.error(
-                            request,
-                            "Este intercambio supera el máximo de 10 objetos en total."
-                        )
-                        return redirect("rpg_trade_detail", trade_id=trade.id)
-
-                    # Transferir monedas
-                    # from_user da from_coins a to_user
-                    if trade.from_coins > 0:
-                        from_profile = get_or_create_profile(trade.from_user)
-                        to_profile = get_or_create_profile(trade.to_user)
-
-                        if from_profile.coins < trade.from_coins:
-                            messages.error(
-                                request,
-                                f"{trade.from_user.username} no tiene suficientes monedas."
-                            )
-                            return redirect("rpg_trade_detail", trade_id=trade.id)
-
-                        from_profile.coins -= trade.from_coins
-                        to_profile.coins += trade.from_coins
-                        from_profile.save()
-                        to_profile.save()
-
-                    # to_user da to_coins a from_user
-                    if trade.to_coins > 0:
-                        from_profile = get_or_create_profile(trade.from_user)
-                        to_profile = get_or_create_profile(trade.to_user)
-
-                        if to_profile.coins < trade.to_coins:
-                            messages.error(
-                                request,
-                                f"{trade.to_user.username} no tiene suficientes monedas."
-                            )
-                            return redirect("rpg_trade_detail", trade_id=trade.id)
-
-                        to_profile.coins -= trade.to_coins
-                        from_profile.coins += trade.to_coins
-                        from_profile.save()
-                        to_profile.save()
-
-                    # Transferir objetos
-                    for item in trade.offered_from.all():
-                        item.owner = trade.to_user
-                        item.save()
-
-                    for item in trade.offered_to.all():
-                        item.owner = trade.from_user
-                        item.save()
-
-                    trade.status = Trade.STATUS_ACCEPTED
-                    trade.last_actor = me
-                    trade.save()
-
-                    # Notificaciones
-                    Notification.objects.create(
-                        user=other,
-                        message=f"{me.username} ha aceptado el intercambio #{trade.id}.",
-                        url=reverse("rpg_trade_detail", args=[trade.id]),
-                    )
-
-                    messages.success(request, "Intercambio completado correctamente.")
-                    return redirect("rpg_trades")
-
-            except IntegrityError:
-                messages.error(
-                    request,
-                    "Ocurrió un problema al completar el intercambio. Inténtalo nuevamente."
-                )
+        # ----------------------------
+        # CONTRAOFERTA (monedas + ítems)
+        # ----------------------------
+        if action == "counter":
+            # Solo participantes (o superuser)
+            if not trade.is_party(request.user) and not request.user.is_superuser:
+                messages.error(request, "No puedes modificar un intercambio ajeno.")
                 return redirect("rpg_trade_detail", trade_id=trade.id)
 
-        # --------------------------
-        # RECHAZAR / CANCELAR
-        # --------------------------
-        elif action == "reject":
-            if me == trade.to_user:
-                trade.status = Trade.STATUS_REJECTED
-                trade.last_actor = me
-                trade.save()
+            def parse_int(value, default=0):
+                try:
+                    return max(0, int(value))
+                except (TypeError, ValueError):
+                    return default
 
-                Notification.objects.create(
-                    user=other,
-                    message=f"{me.username} ha rechazado tu intercambio #{trade.id}.",
-                    url=reverse("rpg_trade_detail", args=[trade.id]),
-                )
+            # Nuevos valores de monedas
+            new_from_coins = parse_int(request.POST.get("from_coins"), trade.from_coins)
+            new_to_coins = parse_int(request.POST.get("to_coins"), trade.to_coins)
 
-                messages.info(request, "Has rechazado el intercambio.")
-            else:
-                messages.error(request, "Solo el receptor puede rechazar el intercambio.")
-            return redirect("rpg_trades")
+            # Ítems seleccionados para cada lado
+            from_item_ids = request.POST.getlist("from_items")
+            to_item_ids = request.POST.getlist("to_items")
 
-        elif action == "cancel":
-            if me == trade.from_user:
-                trade.status = Trade.STATUS_CANCELLED
-                trade.last_actor = me
-                trade.save()
-
-                Notification.objects.create(
-                    user=other,
-                    message=f"{me.username} ha cancelado el intercambio #{trade.id}.",
-                    url=reverse("rpg_trade_detail", args=[trade.id]),
-                )
-
-                messages.info(request, "Has cancelado el intercambio.")
-            else:
-                messages.error(request, "Solo el emisor puede cancelar el intercambio.")
-            return redirect("rpg_trades")
-
-        # --------------------------
-        # CONTRA-OFERTA (editar trade)
-        # --------------------------
-        elif action == "counter":
-            # Estos campos SIEMPRE representan lo que da cada lado
-            new_from_coins = parse_int(request.POST.get("from_coins"), 0)
-            new_to_coins = parse_int(request.POST.get("to_coins"), 0)
-
-            from_items_ids = request.POST.getlist("from_items")
-            to_items_ids = request.POST.getlist("to_items")
-
+            # Solo se pueden ofrecer ítems que realmente son de cada jugador
             from_items_qs = CombatItem.objects.filter(
                 owner=trade.from_user,
-                pk__in=from_items_ids,
+                pk__in=from_item_ids
             )
             to_items_qs = CombatItem.objects.filter(
                 owner=trade.to_user,
-                pk__in=to_items_ids,
+                pk__in=to_item_ids
             )
 
+            # Límite de 10 ítems en total
             if from_items_qs.count() + to_items_qs.count() > 10:
                 messages.error(
                     request,
-                    "No puedes tener más de 10 objetos en total en un intercambio."
+                    "No puedes ofrecer más de 10 objetos en total entre ambos jugadores."
                 )
                 return redirect("rpg_trade_detail", trade_id=trade.id)
 
+            # Actualizamos oferta de monedas e ítems
             trade.from_coins = new_from_coins
             trade.to_coins = new_to_coins
             trade.offered_from.set(from_items_qs)
             trade.offered_to.set(to_items_qs)
-            trade.status = Trade.STATUS_PENDING
-            trade.last_actor = me
+
+            # Cualquier cambio en la oferta invalida confirmaciones previas
+            trade.reset_confirmations()
+            trade.last_actor = request.user
             trade.save()
 
-            Notification.objects.create(
-                user=other,
-                message=f"{me.username} ha enviado una contra-oferta en el intercambio #{trade.id}.",
-                url=reverse("rpg_trade_detail", args=[trade.id]),
+            messages.info(
+                request,
+                "Has enviado una contraoferta. Ambas partes deben volver a confirmar."
             )
-
-            messages.success(request, "Contra-oferta enviada.")
             return redirect("rpg_trade_detail", trade_id=trade.id)
 
-    # Contexto para template
+        # ----------------------------
+        # Cancelar / rechazar
+        # ----------------------------
+        if action == "cancel":
+            # normalmente quien inició puede cancelarlo
+            if not is_from and not request.user.is_superuser:
+                messages.error(request, "Solo el creador puede cancelar el intercambio.")
+                return redirect("rpg_trade_detail", trade_id=trade.id)
+
+            trade.status = Trade.STATUS_CANCELLED
+            trade.reset_confirmations()
+            trade.last_actor = request.user
+            trade.save()
+            messages.info(request, "Has cancelado el intercambio.")
+            return redirect("rpg_trades")
+
+        if action == "reject":
+            # el receptor lo rechaza
+            if not is_to and not request.user.is_superuser:
+                messages.error(request, "Solo el receptor puede rechazar el intercambio.")
+                return redirect("rpg_trade_detail", trade_id=trade.id)
+
+            trade.status = Trade.STATUS_REJECTED
+            trade.reset_confirmations()
+            trade.last_actor = request.user
+            trade.save()
+            messages.info(request, "Has rechazado el intercambio.")
+            return redirect("rpg_trades")
+
+        # ----------------------------
+        # FINALIZAR: requiere AMBOS confirmados
+        # ----------------------------
+        if action == "finalize":
+            if not trade.can_be_finalized():
+                messages.error(request, "El intercambio debe estar confirmado por ambas partes antes de completarse.")
+                return redirect("rpg_trade_detail", trade_id=trade.id)
+
+            try:
+                with transaction.atomic():
+                    # Bloquear perfiles e items para evitar carreras
+                    from_profile, _ = UserProfile.objects.select_for_update().get_or_create(user=trade.from_user)
+                    to_profile, _ = UserProfile.objects.select_for_update().get_or_create(user=trade.to_user)
+
+                    # Revalidar que todo está OK
+                    if from_profile.coins < trade.from_coins:
+                        raise ValueError("El emisor ya no tiene suficientes monedas.")
+                    if to_profile.coins < trade.to_coins:
+                        raise ValueError("El receptor ya no tiene suficientes monedas.")
+
+                    # Validar propiedad de items
+                    for item in trade.offered_from.all():
+                        if item.owner_id != trade.from_user_id:
+                            raise ValueError(f"{item.name} ya no pertenece al emisor.")
+                    for item in trade.offered_to.all():
+                        if item.owner_id != trade.to_user_id:
+                            raise ValueError(f"{item.name} ya no pertenece al receptor.")
+
+                    # Mover monedas
+                    if trade.from_coins:
+                        from_profile.coins -= trade.from_coins
+                        to_profile.coins += trade.from_coins
+
+                    if trade.to_coins:
+                        to_profile.coins -= trade.to_coins
+                        from_profile.coins += trade.to_coins
+
+                    from_profile.save()
+                    to_profile.save()
+
+                    # Mover items
+                    for item in trade.offered_from.all():
+                        item.owner = trade.to_user
+                        item.save(update_fields=["owner"])
+
+                    for item in trade.offered_to.all():
+                        item.owner = trade.from_user
+                        item.save(update_fields=["owner"])
+
+                    # Marcar como aceptado
+                    trade.status = Trade.STATUS_ACCEPTED
+                    trade.last_actor = request.user
+                    trade.save()
+
+            except ValueError as e:
+                messages.error(request, f"No se pudo completar el intercambio: {e}")
+                return redirect("rpg_trade_detail", trade_id=trade.id)
+
+            messages.success(request, "¡Intercambio completado correctamente!")
+            return redirect("rpg_trades")
+
+    # GET: mostrar detalle
+    from_inventory = CombatItem.objects.filter(owner=trade.from_user).order_by("name")
+    to_inventory = CombatItem.objects.filter(owner=trade.to_user).order_by("name")
+
     context = {
         "trade": trade,
-        "me": me,
-        "other": other,
-        "my_profile": my_profile,
-        "other_profile": other_profile,
-        "my_items": my_items,
-        "other_items": other_items,
-        "is_from_side": is_from_side,
+        "is_from": (request.user == trade.from_user),
+        "is_to": (request.user == trade.to_user),
+        "from_inventory": from_inventory,
+        "to_inventory": to_inventory,
     }
     return render(request, "notes/rpg_trade_detail.html", context)
+
+
+
 
 # ============================================================
 #  WORLD BOSS

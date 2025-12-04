@@ -1,283 +1,318 @@
 {% extends "base.html" %}
+
 {% block content %}
+<div class="container my-4">
 
-<h2 class="fw-bold mb-3">Intercambio #{{ trade.id }} 🔁</h2>
+  <div class="row mb-3">
+    <div class="col-12">
+      <h2 class="fw-bold">
+        Intercambio #{{ trade.id }}
+        <span class="badge bg-secondary ms-2 text-uppercase">
+          {{ trade.get_status_display }}
+        </span>
+      </h2>
+      <p class="text-muted mb-0">
+        Creado el {{ trade.created_at|date:"d/m/Y H:i" }} —
+        Última actualización {{ trade.updated_at|date:"d/m/Y H:i" }}
+      </p>
+    </div>
+  </div>
 
-<div class="d-flex flex-wrap gap-2 mb-3">
-  <a href="{% url 'rpg_trades' %}" class="btn btn-outline-secondary btn-sm rounded-pill">
-    ← Volver a intercambios
-  </a>
-</div>
+  <!-- Resumen participantes -->
+  <div class="row mb-3">
+    <div class="col-md-6 mb-2">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            Emisor (from): {{ trade.from_user.username }}
+            {% if trade.from_confirmed %}
+              <span class="badge bg-success ms-1">✔ Aceptó</span>
+            {% else %}
+              <span class="badge bg-warning text-dark ms-1">Pendiente</span>
+            {% endif %}
+          </h5>
+          <p class="mb-0">
+            Monedas que ofrece:
+            <strong>{{ trade.from_coins }}</strong> 🪙
+          </p>
+        </div>
+      </div>
+    </div>
 
-<div class="row g-3">
-  <!-- Resumen -->
-  <div class="col-lg-4">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="fw-bold mb-2">Resumen</h5>
-
-        <p class="mb-1" style="font-size: 0.9rem;">
-          Emisor: <strong>{{ trade.from_user.username }}</strong><br>
-          Receptor: <strong>{{ trade.to_user.username }}</strong>
-        </p>
-
-        <p class="mb-1" style="font-size: 0.9rem;">
-          Estado:
-          {% if trade.status == "pending" %}
-            <span class="badge bg-warning text-dark">Pendiente</span>
-          {% elif trade.status == "accepted" %}
-            <span class="badge bg-success">Aceptado</span>
-          {% elif trade.status == "rejected" %}
-            <span class="badge bg-danger">Rechazado</span>
-          {% else %}
-            <span class="badge bg-secondary">Cancelado</span>
-          {% endif %}
-        </p>
-
-        <hr class="my-2">
-
-        <h6 class="fw-bold" style="font-size: 0.95rem;">Desde tu perspectiva</h6>
-        <p class="mb-1" style="font-size: 0.85rem;">
-          Tú entregas:
-          {% if is_from_side %}
-            <strong>{{ trade.from_coins }}</strong> monedas y
-            <strong>{{ trade.offered_from.count }}</strong> objeto(s).
-          {% else %}
-            <strong>{{ trade.to_coins }}</strong> monedas y
-            <strong>{{ trade.offered_to.count }}</strong> objeto(s).
-          {% endif %}
-        </p>
-        <p class="mb-2" style="font-size: 0.85rem;">
-          Tú recibes:
-          {% if is_from_side %}
-            <strong>{{ trade.to_coins }}</strong> monedas y
-            <strong>{{ trade.offered_to.count }}</strong> objeto(s).
-          {% else %}
-            <strong>{{ trade.from_coins }}</strong> monedas y
-            <strong>{{ trade.offered_from.count }}</strong> objeto(s).
-          {% endif %}
-        </p>
-
-        <hr class="my-2">
-
-        <p class="mb-1" style="font-size: 0.85rem;">
-          Tus monedas: <strong>{{ my_profile.coins }}</strong>
-        </p>
-        <p class="mb-0" style="font-size: 0.85rem;">
-          Monedas de {{ other.username }}: <strong>{{ other_profile.coins }}</strong>
-        </p>
+    <div class="col-md-6 mb-2">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-1">
+            Receptor (to): {{ trade.to_user.username }}
+            {% if trade.to_confirmed %}
+              <span class="badge bg-success ms-1">✔ Aceptó</span>
+            {% else %}
+              <span class="badge bg-warning text-dark ms-1">Pendiente</span>
+            {% endif %}
+          </h5>
+          <p class="mb-0">
+            Monedas que ofrece:
+            <strong>{{ trade.to_coins }}</strong> 🪙
+          </p>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Detalle y edición -->
-  <div class="col-lg-8">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="fw-bold mb-3">Detalle del intercambio</h5>
-
-        {% if trade.status == "pending" %}
-        <p class="text-muted" style="font-size: 0.85rem;">
-          Puedes ajustar la oferta de ambos lados y mandar una contra-oferta, o aceptar si estás conforme.
-        </p>
-        {% else %}
-        <p class="text-muted" style="font-size: 0.85rem;">
-          Este intercambio ya no está activo, solo se muestra como historial.
-        </p>
-        {% endif %}
-
-        <div class="row">
-          <div class="col-md-6">
-            <h6 class="fw-bold" style="font-size: 0.9rem;">
-              Lo que da {{ trade.from_user.username }}
-            </h6>
-            <ul class="mb-1" style="font-size: 0.85rem;">
-              <li>Monedas: <strong>{{ trade.from_coins }}</strong></li>
-              <li>Objetos: {{ trade.offered_from.count }}</li>
-            </ul>
-          </div>
-          <div class="col-md-6">
-            <h6 class="fw-bold" style="font-size: 0.9rem;">
-              Lo que da {{ trade.to_user.username }}
-            </h6>
-            <ul class="mb-1" style="font-size: 0.85rem;">
-              <li>Monedas: <strong>{{ trade.to_coins }}</strong></li>
-              <li>Objetos: {{ trade.offered_to.count }}</li>
-            </ul>
-          </div>
+  <!-- Objetos ofrecidos actualmente -->
+  <div class="row mb-4">
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-header fw-bold">
+          Objetos que ofrece {{ trade.from_user.username }}
         </div>
+        <div class="card-body p-2">
+          {% if trade.offered_from.all %}
+            <ul class="list-group list-group-flush">
+              {% for item in trade.offered_from.all %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  {{ item.name }}
+                  <span class="badge bg-dark">
+                    {{ item.get_rarity_display }}
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted mb-0">No ofrece objetos.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
 
-        {% if trade.status == "pending" %}
-        <hr class="my-3">
+    <div class="col-md-6 mb-3">
+      <div class="card h-100">
+        <div class="card-header fw-bold">
+          Objetos que ofrece {{ trade.to_user.username }}
+        </div>
+        <div class="card-body p-2">
+          {% if trade.offered_to.all %}
+            <ul class="list-group list-group-flush">
+              {% for item in trade.offered_to.all %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  {{ item.name }}
+                  <span class="badge bg-dark">
+                    {{ item.get_rarity_display }}
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted mb-0">No ofrece objetos.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
 
-        <!-- Formulario de contra-oferta -->
-        <form method="post" class="mb-3">
+  <!-- Estado de aceptaciones -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="alert alert-info py-2">
+        <strong>Estado de confirmación:</strong><br>
+        · {{ trade.from_user.username }}:
+        {% if trade.from_confirmed %}
+          ✅ ha aceptado
+        {% else %}
+          ⏳ aún no acepta
+        {% endif %}
+        <br>
+        · {{ trade.to_user.username }}:
+        {% if trade.to_confirmed %}
+          ✅ ha aceptado
+        {% else %}
+          ⏳ aún no acepta
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Acciones -->
+  {% if trade.is_pending %}
+    <div class="row mb-4">
+      <div class="col-12">
+
+        <!-- Confirmar / desconfirmar -->
+        <form method="post" class="d-inline">
           {% csrf_token %}
-          <input type="hidden" name="action" value="counter">
-
-          <div class="row">
-            <!-- Lado from_user -->
-            <div class="col-md-6">
-              <h6 class="fw-bold" style="font-size: 0.9rem;">
-                Aporta: {{ trade.from_user.username }}
-              </h6>
-
-              <div class="mb-2">
-                <label class="form-label" style="font-size: 0.85rem;">
-                  Monedas que entrega:
-                </label>
-                <input type="number" name="from_coins"
-                       class="form-control form-control-sm"
-                       min="0" value="{{ trade.from_coins }}">
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label" style="font-size: 0.85rem;">
-                  Objetos que entrega:
-                </label>
-                <div class="border rounded p-2"
-                     style="max-height: 180px; overflow-y: auto; font-size: 0.8rem;">
-
-                  {% if trade.from_user.id == my_profile.user.id %}
-                    {% for item in my_items %}
-                      <div class="form-check">
-                        <input class="form-check-input"
-                               type="checkbox"
-                               name="from_items"
-                               value="{{ item.id }}"
-                               id="from_item_{{ item.id }}"
-                               {% if item in trade.offered_from.all %}checked{% endif %}>
-                        <label class="form-check-label" for="from_item_{{ item.id }}">
-                          {{ item.name }}
-                        </label>
-                      </div>
-                    {% endfor %}
-                  {% else %}
-                    {% for item in other_items %}
-                      <div class="form-check">
-                        <input class="form-check-input"
-                               type="checkbox"
-                               name="from_items"
-                               value="{{ item.id }}"
-                               id="from_item_{{ item.id }}"
-                               {% if item in trade.offered_from.all %}checked{% endif %}>
-                        <label class="form-check-label" for="from_item_{{ item.id }}">
-                          {{ item.name }}
-                        </label>
-                      </div>
-                    {% endfor %}
-                  {% endif %}
-
-                </div>
-              </div>
-            </div>
-
-            <!-- Lado to_user -->
-            <div class="col-md-6">
-              <h6 class="fw-bold" style="font-size: 0.9rem;">
-                Aporta: {{ trade.to_user.username }}
-              </h6>
-
-              <div class="mb-2">
-                <label class="form-label" style="font-size: 0.85rem;">
-                  Monedas que entrega:
-                </label>
-                <input type="number" name="to_coins"
-                       class="form-control form-control-sm"
-                       min="0" value="{{ trade.to_coins }}">
-              </div>
-
-              <div class="mb-2">
-                <label class="form-label" style="font-size: 0.85rem;">
-                  Objetos que entrega:
-                </label>
-                <div class="border rounded p-2"
-                     style="max-height: 180px; overflow-y: auto; font-size: 0.8rem;">
-
-                  {% if trade.to_user.id == my_profile.user.id %}
-                    {% for item in my_items %}
-                      <div class="form-check">
-                        <input class="form-check-input"
-                               type="checkbox"
-                               name="to_items"
-                               value="{{ item.id }}"
-                               id="to_item_{{ item.id }}"
-                               {% if item in trade.offered_to.all %}checked{% endif %}>
-                        <label class="form-check-label" for="to_item_{{ item.id }}">
-                          {{ item.name }}
-                        </label>
-                      </div>
-                    {% endfor %}
-                  {% else %}
-                    {% for item in other_items %}
-                      <div class="form-check">
-                        <input class="form-check-input"
-                               type="checkbox"
-                               name="to_items"
-                               value="{{ item.id }}"
-                               id="to_item_{{ item.id }}"
-                               {% if item in trade.offered_to.all %}checked{% endif %}>
-                        <label class="form-check-label" for="to_item_{{ item.id }}">
-                          {{ item.name }}
-                        </label>
-                      </div>
-                    {% endfor %}
-                  {% endif %}
-
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <button type="submit" class="btn btn-primary btn-sm mt-2">
-            Enviar contra-oferta
-          </button>
+          {% if is_from %}
+            {% if trade.from_confirmed %}
+              <input type="hidden" name="action" value="unconfirm">
+              <button class="btn btn-sm btn-outline-warning">
+                Quitar mi confirmación
+              </button>
+            {% else %}
+              <input type="hidden" name="action" value="confirm">
+              <button class="btn btn-sm btn-success">
+                Confirmar intercambio
+              </button>
+            {% endif %}
+          {% elif is_to %}
+            {% if trade.to_confirmed %}
+              <input type="hidden" name="action" value="unconfirm">
+              <button class="btn btn-sm btn-outline-warning">
+                Quitar mi confirmación
+              </button>
+            {% else %}
+              <input type="hidden" name="action" value="confirm">
+              <button class="btn btn-sm btn-success">
+                Confirmar intercambio
+              </button>
+            {% endif %}
+          {% endif %}
         </form>
 
-        <!-- Acciones: aceptar / rechazar / cancelar -->
-        <div class="d-flex flex-wrap gap-2">
-          <!-- Aceptar -->
-          <form method="post">
+        <!-- Finalizar (solo aparece si ambas partes confirmaron) -->
+        {% if trade.from_confirmed and trade.to_confirmed %}
+          <form method="post" class="d-inline ms-2">
             {% csrf_token %}
-            <input type="hidden" name="action" value="accept">
-            <button type="submit"
-                    class="btn btn-success btn-sm"
-                    onclick="return confirm('¿Aceptar este intercambio tal como está?');">
-              Aceptar intercambio
+            <input type="hidden" name="action" value="finalize">
+            <button class="btn btn-sm btn-primary">
+              Finalizar intercambio
             </button>
           </form>
+        {% endif %}
 
-          <!-- Rechazar (solo receptor) -->
-          {% if me.id == trade.to_user.id %}
-          <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="reject">
-            <button type="submit"
-                    class="btn btn-outline-danger btn-sm"
-                    onclick="return confirm('¿Rechazar este intercambio?');">
-              Rechazar
-            </button>
-          </form>
-          {% endif %}
-
-          <!-- Cancelar (solo emisor) -->
-          {% if me.id == trade.from_user.id %}
-          <form method="post">
+        <!-- Cancelar / Rechazar -->
+        {% if is_from %}
+          <form method="post" class="d-inline ms-2">
             {% csrf_token %}
             <input type="hidden" name="action" value="cancel">
-            <button type="submit"
-                    class="btn btn-outline-secondary btn-sm"
-                    onclick="return confirm('¿Cancelar este intercambio?');">
-              Cancelar
+            <button class="btn btn-sm btn-outline-danger">
+              Cancelar intercambio
             </button>
           </form>
-          {% endif %}
-        </div>
-
+        {% elif is_to %}
+          <form method="post" class="d-inline ms-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reject">
+            <button class="btn btn-sm btn-outline-danger">
+              Rechazar intercambio
+            </button>
+          </form>
         {% endif %}
+
+        <!-- Botón mostrar contraoferta -->
+        <button class="btn btn-sm btn-outline-primary ms-2"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#counterForm">
+          Hacer contraoferta (monedas + objetos)
+        </button>
+
       </div>
     </div>
-  </div>
-</div>
 
+    <!-- Formulario de contraoferta (MONEDAS + ÍTEMS) -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="collapse" id="counterForm">
+          <div class="card card-body">
+            <h5 class="card-title">Contraoferta</h5>
+            <p class="text-muted">
+              Al cambiar monedas u objetos, las confirmaciones de ambos jugadores se reiniciarán
+              y deberán volver a confirmar el intercambio. Máximo 10 objetos en total entre ambos lados.
+            </p>
+
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="counter">
+
+              <!-- Monedas -->
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">
+                    Monedas que ofrece {{ trade.from_user.username }}
+                  </label>
+                  <input type="number"
+                         name="from_coins"
+                         min="0"
+                         value="{{ trade.from_coins }}"
+                         class="form-control">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">
+                    Monedas que ofrece {{ trade.to_user.username }}
+                  </label>
+                  <input type="number"
+                         name="to_coins"
+                         min="0"
+                         value="{{ trade.to_coins }}"
+                         class="form-control">
+                </div>
+              </div>
+
+              <!-- Ítems -->
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">
+                    Objetos que ofrece {{ trade.from_user.username }}
+                  </label>
+                  <select name="from_items" multiple class="form-select" size="8">
+                    {% for item in from_inventory %}
+                      <option value="{{ item.id }}"
+                        {% if item in trade.offered_from.all %}selected{% endif %}>
+                        {{ item.name }} ({{ item.get_rarity_display }})
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <small class="text-muted">
+                    Mantén Ctrl/Shift para seleccionar varios.
+                  </small>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">
+                    Objetos que ofrece {{ trade.to_user.username }}
+                  </label>
+                  <select name="to_items" multiple class="form-select" size="8">
+                    {% for item in to_inventory %}
+                      <option value="{{ item.id }}"
+                        {% if item in trade.offered_to.all %}selected{% endif %}>
+                        {{ item.name }} ({{ item.get_rarity_display }})
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <small class="text-muted">
+                    Máximo 10 objetos en total entre ambos lados.
+                  </small>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary mt-2">
+                Enviar contraoferta
+              </button>
+            </form>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  {% else %}
+    <!-- Si el trade ya no está pendiente -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="alert alert-secondary">
+          Este intercambio ya no está pendiente (estado:
+          <strong>{{ trade.get_status_display }}</strong>).
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row">
+    <div class="col-12">
+      <a href="{% url 'rpg_trades' %}" class="btn btn-outline-secondary btn-sm">
+        ← Volver a mis intercambios
+      </a>
+    </div>
+  </div>
+
+</div>
 {% endblock %}
