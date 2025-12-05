@@ -2252,7 +2252,7 @@ def _advance_world_boss_battle(cycle: WorldBossCycle, now_local, cycle_start):
         # 2) El jefe golpea a todos con 50 de daño fijo
         log_lines.append(f"- El jefe golpea a todos y hace 50 de daño.")
         for p in alive:
-            p.current_hp -= 50
+            p.current_hp -= 75
             if p.current_hp <= 0:
                 p.current_hp = 0
                 log_lines.append(f"  · {p.user.username} ha sido derrotado.")
