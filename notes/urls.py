@@ -19,6 +19,7 @@ urlpatterns = [
     path('rpg/torre/', views.rpg_tower, name='rpg_tower'),
     path('rpg/inventario/', views.rpg_inventory, name='rpg_inventory'),
     path('rpg/gacha/config/', views.rpg_gacha_config, name='rpg_gacha_config'),
+    path('rpg/gacha/config/premium/', views.rpg_gacha_premium_config, name='rpg_gacha_premium_config'),
     path("rpg/pvp/", views.rpg_pvp_arena, name="rpg_pvp_arena"),
     path("rpg/pvp/challenge/<int:target_id>/", views.rpg_pvp_challenge, name="rpg_pvp_challenge"),
     path("rpg/pvp/leaderboard/", views.rpg_pvp_leaderboard, name="rpg_pvp_leaderboard"),

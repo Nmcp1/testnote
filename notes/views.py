@@ -31,6 +31,7 @@ from .models import (
     ItemSlot,
     ItemSource,
     GachaProbability,
+    GachaType,
     PvpRanking,
     PvpBattleLog,
     Trade,
@@ -528,48 +529,89 @@ def mine_game(request):
 # RPG — GACHA CONFIG + STATS
 # =================
 
-# defaults por si la tabla está vacía
-DEFAULT_GACHA_PROBS = [
-    (ItemRarity.BASIC, 0.80),
-    (ItemRarity.UNCOMMON, 0.15),
-    (ItemRarity.SPECIAL, 0.04),
-    (ItemRarity.EPIC, 0.009),
-    (ItemRarity.LEGENDARY, 0.0009),
-    (ItemRarity.MYTHIC, 0.00009),
-    (ItemRarity.ASCENDED, 0.00001),
+# Probabilidades por defecto del GACHA NORMAL
+# Usamos SIEMPRE códigos string (basic, uncommon, ...)
+DEFAULT_GACHA_PROBS_NORMAL = [
+    (ItemRarity.BASIC.value, 0.80),
+    (ItemRarity.UNCOMMON.value, 0.15),
+    (ItemRarity.SPECIAL.value, 0.04),
+    (ItemRarity.EPIC.value, 0.009),
+    (ItemRarity.LEGENDARY.value, 0.0009),
+    (ItemRarity.MYTHIC.value, 0.00009),
+    (ItemRarity.ASCENDED.value, 0.00001),
+]
+
+# Probabilidades por defecto del GACHA PREMIUM
+# (el resto hasta 1.0 se usa como probabilidad de +1 rubí)
+DEFAULT_GACHA_PROBS_PREMIUM = [
+    (ItemRarity.BASIC.value, 0.0),
+    (ItemRarity.UNCOMMON.value, 0.0),
+    (ItemRarity.SPECIAL.value, 0.65),
+    (ItemRarity.EPIC.value, 0.255),
+    (ItemRarity.LEGENDARY.value, 0.045),
+    (ItemRarity.MYTHIC.value, 0.0049),   # 0.199 %
+    (ItemRarity.ASCENDED.value, 0.0001), # 0.001 %
 ]
 
 
-def get_gacha_probs():
+def get_gacha_probs(gacha_type=GachaType.NORMAL):
     """
-    Devuelve una lista de tuplas (rarity, prob) SIEMPRE ordenada
-    por calidad: Básica → Poco común → Especial → Épica →
-    Legendaria → Mítica → Ascendida.
+    Devuelve una lista de tuplas (code, prob) donde code es SIEMPRE
+    el código string de ItemRarity (basic, uncommon, ...),
+    ordenado de peor a mejor.
     """
-    qs = GachaProbability.objects.all()
-    if not qs.exists():
-        for rarity, prob in DEFAULT_GACHA_PROBS:
-            GachaProbability.objects.create(rarity=rarity, probability=prob)
-        qs = GachaProbability.objects.all()
+    if gacha_type == GachaType.NORMAL:
+        defaults = DEFAULT_GACHA_PROBS_NORMAL
+    else:
+        defaults = DEFAULT_GACHA_PROBS_PREMIUM
 
-    # Mapeamos lo que haya en BD
+    qs = GachaProbability.objects.filter(gacha_type=gacha_type)
+    if not qs.exists():
+        # Semilla inicial en BD
+        for rarity_code, prob in defaults:
+            GachaProbability.objects.create(
+                gacha_type=gacha_type,
+                rarity=rarity_code,
+                probability=prob,
+            )
+        qs = GachaProbability.objects.filter(gacha_type=gacha_type)
+
     db_map = {row.rarity: row.probability for row in qs}
 
     ordered = []
-    for rarity, default_prob in DEFAULT_GACHA_PROBS:
-        ordered.append((rarity, db_map.get(rarity, default_prob)))
+    for rarity_enum in [
+        ItemRarity.BASIC,
+        ItemRarity.UNCOMMON,
+        ItemRarity.SPECIAL,
+        ItemRarity.EPIC,
+        ItemRarity.LEGENDARY,
+        ItemRarity.MYTHIC,
+        ItemRarity.ASCENDED,
+    ]:
+        code = rarity_enum.value
+        prob = db_map.get(code, 0.0)
+        ordered.append((code, prob))
+
     return ordered
 
 
-def roll_rarity():
-    probs = get_gacha_probs()
+
+
+def roll_rarity(gacha_type=GachaType.NORMAL):
+    """
+    Devuelve el código de rareza (string) según las probabilidades
+    configuradas para el tipo de gacha dado.
+    """
+    probs = get_gacha_probs(gacha_type)
     r = random.random()
     acumulado = 0.0
-    for rarity, prob in probs:
+    for rarity_code, prob in probs:
         acumulado += prob
         if r <= acumulado:
-            return rarity
+            return rarity_code
     return probs[-1][0]
+
+
 
 
 SLOT_LABELS = {
@@ -1028,12 +1070,25 @@ def rpg_shop(request):
 @login_required
 def rpg_gacha(request):
     profile = get_or_create_profile(request.user)
+
     rolled_item = None
     rolled_rarity = None
     auto_sold = False
     auto_sell_gain = 0
+    gained_ruby = False  # solo premium
 
-    # Slots permitidos en ESTE gacha (sin mascotas)
+    # Tipo de gacha actual (normal/premium), viene por GET o POST
+    gtype_param = (
+        request.POST.get("gtype")
+        or request.GET.get("gtype")
+        or GachaType.NORMAL
+    )
+    try:
+        current_gacha_type = GachaType(gtype_param)
+    except ValueError:
+        current_gacha_type = GachaType.NORMAL
+
+    # Slots permitidos en el gacha de equipo (sin mascotas, por ahora)
     GACHA_SLOTS = {
         ItemSlot.WEAPON,
         ItemSlot.HELMET,
@@ -1045,19 +1100,21 @@ def rpg_gacha(request):
     }
     GACHA_SLOT_VALUES = {s.value for s in GACHA_SLOTS}
 
-    # Último slot usado en el gacha (para que no se reseteé al refrescar)
-    last_slot = request.session.get("rpg_gacha_last_slot", ItemSlot.WEAPON.value)
+    # Último slot usado en el gacha normal
+    last_slot = request.session.get(GACHA_LAST_SLOT_SESSION_KEY, ItemSlot.WEAPON.value)
     if last_slot not in GACHA_SLOT_VALUES:
         last_slot = ItemSlot.WEAPON.value
 
-    # --- Preferencias de auto vender del usuario ---
+    # Preferencias de auto vender
     auto_sell_set = set()
     if profile.auto_sell_rarities:
-        auto_sell_set = set(
-            r for r in profile.auto_sell_rarities.split(",") if r.strip()
-        )
+        auto_sell_set = {
+            r.strip()
+            for r in profile.auto_sell_rarities.split(",")
+            if r.strip()
+        }
 
-    # Valores de venta por rareza (mismo sistema que el inventario)
+    # Valores de venta por rareza (para auto vender)
     SELL_VALUES = {
         ItemRarity.BASIC: 2,
         ItemRarity.UNCOMMON: 20,
@@ -1072,96 +1129,154 @@ def rpg_gacha(request):
         action = request.POST.get("action", "roll")
 
         # ----------------------------------------
-        # 1) Actualizar configuración de AUTO VENDER
+        # 1) Configurar auto vender
         # ----------------------------------------
         if action == "config_autosell":
             selected = request.POST.getlist("auto_sell")
-            # Guardamos los códigos de rareza como 'basic,uncommon,...'
             profile.auto_sell_rarities = ",".join(selected)
             profile.save()
             messages.success(request, "Preferencias de auto vender actualizadas.")
-            return redirect("rpg_gacha")
+            return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
 
         # ----------------------------------------
-        # 2) Tirada de GACHA normal
+        # 2) Tirada de gacha
         # ----------------------------------------
-        elif action == "roll":
-            slot_code = request.POST.get("slot", last_slot)
+        if action == "roll":
+            # Costes
+            NORMAL_COST = 15
+            PREMIUM_COST = 300
 
-            # Validar que el slot sea válido como enum
-            try:
+            if current_gacha_type == GachaType.NORMAL:
+                # Slot elegido por el usuario
+                slot_code = request.POST.get("slot", last_slot)
+
+                # Validar slot
+                if slot_code not in GACHA_SLOT_VALUES:
+                    messages.error(request, "Slot inválido.")
+                    return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
+
                 slot = ItemSlot(slot_code)
-            except ValueError:
-                messages.error(request, "Slot inválido.")
-                return redirect("rpg_gacha")
 
-            # Evitar que se use un slot que no pertenece al gacha (ej: PET)
-            if slot not in GACHA_SLOTS:
-                messages.error(
-                    request,
-                    "Este tipo de equipamiento no puede salir en este gacha."
+                if profile.coins < NORMAL_COST:
+                    messages.error(request, "No tienes suficientes monedas.")
+                    return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
+
+                # Guardamos slot en sesión
+                request.session[GACHA_LAST_SLOT_SESSION_KEY] = slot.value
+                last_slot = slot.value
+
+                # Elegir rareza
+                rarity = roll_rarity(GachaType.NORMAL)
+                stats = generate_item_stats(slot, rarity, from_gacha=True)
+                name = f"{SLOT_LABELS[slot]} {ItemRarity(rarity).label}"
+
+                # Cobrar coste
+                profile.coins -= NORMAL_COST
+                profile.save()
+
+                # Crear ítem
+                item = CombatItem.objects.create(
+                    owner=request.user,
+                    name=name,
+                    slot=slot,
+                    rarity=rarity,
+                    source=ItemSource.GACHA,
+                    attack=stats["attack"],
+                    defense=stats["defense"],
+                    hp=stats["hp"],
+                    crit_chance=stats["crit_chance"],
+                    dodge_chance=stats["dodge_chance"],
+                    speed=stats["speed"],
                 )
-                return redirect("rpg_gacha")
 
-            # Guardar en sesión el último slot seleccionado
-            request.session["rpg_gacha_last_slot"] = slot.value
-            last_slot = slot.value
+                # ¿Auto vender?
+                if rarity in auto_sell_set:
+                    rarity_enum = ItemRarity(rarity)
+                    sell_price = SELL_VALUES.get(rarity_enum, 0)
+                    if sell_price > 0:
+                        profile.coins += sell_price
+                        profile.save()
+                        auto_sold = True
+                        auto_sell_gain = sell_price
+                        item.delete()
+                else:
+                    rolled_item = item
+                    rolled_rarity = rarity
 
-            COST = 15
-            if profile.coins < COST:
-                messages.error(request, "No tienes suficientes monedas.")
-                return redirect("rpg_gacha")
+            else:
+                # -------------- GACHA PREMIUM --------------
+                slot = random.choice(list(GACHA_SLOTS))
 
-            # Determinar rareza según las probabilidades configuradas
-            rarity = roll_rarity()  # rarity es el código: "basic", "epic", etc.
-            stats = generate_item_stats(slot, rarity, from_gacha=True)
-            name = f"{SLOT_LABELS[slot]} {ItemRarity(rarity).label}"
+                if profile.coins < PREMIUM_COST:
+                    messages.error(request, "No tienes suficientes monedas.")
+                    return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
 
-            # Crear el ítem
-            item = CombatItem.objects.create(
-                owner=request.user,
-                name=name,
-                slot=slot,
-                rarity=rarity,
-                source=ItemSource.GACHA,
-                attack=stats["attack"],
-                defense=stats["defense"],
-                hp=stats["hp"],
-                crit_chance=stats["crit_chance"],
-                dodge_chance=stats["dodge_chance"],
-                speed=stats["speed"],
-            )
+                # Probabilidades premium
+                probs = get_gacha_probs(GachaType.PREMIUM)
+                total_prob = sum(prob for _r, prob in probs)
+                ruby_prob = max(0.0, 1.0 - total_prob)
 
-            # Cobrar coste del gacha
-            profile.coins -= COST
-            profile.save()
+                r = random.random()
+                acumulado = 0.0
+                chosen_rarity = None
 
-            # ¿Debe auto venderse según preferencias del usuario?
-            if rarity in auto_sell_set:
-                # Pasamos de código de rareza (string) a enum
-                rarity_enum = ItemRarity(rarity)
-                sell_price = SELL_VALUES.get(rarity_enum, 0)
+                for rarity, prob in probs:
+                    acumulado += prob
+                    if r <= acumulado:
+                        chosen_rarity = rarity
+                        break
 
-                if sell_price > 0:
-                    profile.coins += sell_price
+                # Si no cayó en ninguna rareza, puede caer en rubí
+                if chosen_rarity is None and ruby_prob > 0 and r <= acumulado + ruby_prob:
+                    # Cobrar coste y dar rubí
+                    profile.coins -= PREMIUM_COST
+                    profile.rubies += 1
+                    profile.save()
+                    gained_ruby = True
+                    # No hay ítem en esta tirada
+                else:
+                    # Por seguridad, si no se eligió nada usamos la última rareza
+                    if chosen_rarity is None:
+                        chosen_rarity = probs[-1][0]
+
+                    stats = generate_item_stats(slot, chosen_rarity, from_gacha=True)
+                    name = f"{SLOT_LABELS[slot]} {ItemRarity(chosen_rarity).label}"
+
+                    # Cobrar coste
+                    profile.coins -= PREMIUM_COST
                     profile.save()
 
-                auto_sold = True
-                auto_sell_gain = sell_price
+                    item = CombatItem.objects.create(
+                        owner=request.user,
+                        name=name,
+                        slot=slot,
+                        rarity=chosen_rarity,
+                        source=ItemSource.GACHA,
+                        attack=stats["attack"],
+                        defense=stats["defense"],
+                        hp=stats["hp"],
+                        crit_chance=stats["crit_chance"],
+                        dodge_chance=stats["dodge_chance"],
+                        speed=stats["speed"],
+                    )
 
-                # Eliminamos el ítem del inventario
-                item.delete()
+                    # Auto vender también aplica al premium
+                    rarity_code = chosen_rarity
+                    if rarity_code in auto_sell_set:
+                        rarity_enum = ItemRarity(rarity_code)
+                        sell_price = SELL_VALUES.get(rarity_enum, 0)
+                        if sell_price > 0:
+                            profile.coins += sell_price
+                            profile.save()
+                            auto_sold = True
+                            auto_sell_gain = sell_price
+                            item.delete()
+                    else:
+                        rolled_item = item
+                        rolled_rarity = chosen_rarity
 
-                # No mostramos detalle del ítem porque ya no existe
-                rolled_item = None
-                rolled_rarity = rarity
-            else:
-                # Ítem se conserva normalmente
-                rolled_item = item
-                rolled_rarity = rarity
-
-    # Tabla de probabilidades para mostrar en la UI
-    probs = get_gacha_probs()
+    # Probabilidades a mostrar en la tabla
+    probs = get_gacha_probs(current_gacha_type)
     probabilities = [
         {
             "code": rarity,
@@ -1171,17 +1286,26 @@ def rpg_gacha(request):
         for (rarity, prob) in probs
     ]
 
+    ruby_percent = None
+    if current_gacha_type == GachaType.PREMIUM:
+        used = sum(p["percent"] for p in probabilities)
+        ruby_percent = max(0.0, 100.0 - used)
+
     context = {
         "profile": profile,
         "rolled_item": rolled_item,
         "rolled_rarity": rolled_rarity,
         "probabilities": probabilities,
+        "ruby_percent": ruby_percent,          # solo premium
+        "gacha_type": current_gacha_type,      # normal / premium
         "last_slot": last_slot,
         "auto_sold": auto_sold,
         "auto_sell_gain": auto_sell_gain,
         "auto_sell_selected": auto_sell_set,
+        "GACHA_SLOTS": list(GACHA_SLOTS),      # para el select del gacha normal
     }
     return render(request, "notes/rpg_gacha.html", context)
+
 
 
 
@@ -1449,64 +1573,115 @@ def rpg_inventory(request):
     return render(request, "notes/rpg_inventory.html", context)
 
 
-
-
-@login_required
-def rpg_gacha_config(request):
+def _gacha_config_view(request, gacha_type, defaults, redirect_name):
     if not request.user.is_superuser:
         return HttpResponseForbidden("Solo el superusuario puede modificar el gacha.")
 
-    qs = GachaProbability.objects.all()
+    # Asegurar que existan filas en BD
+    qs = GachaProbability.objects.filter(gacha_type=gacha_type)
     if not qs.exists():
-        for rarity, prob in DEFAULT_GACHA_PROBS:
-            GachaProbability.objects.create(rarity=rarity, probability=prob)
-        qs = GachaProbability.objects.all()
+        for rarity_code, prob in defaults:
+            GachaProbability.objects.create(
+                gacha_type=gacha_type,
+                rarity=rarity_code,
+                probability=prob,
+            )
+        qs = GachaProbability.objects.filter(gacha_type=gacha_type)
+
+    # mapa con los valores actuales en BD
+    current_probs = {row.rarity: row.probability for row in qs}
 
     if request.method == "POST":
         new_values = {}
         total = 0.0
-        for rarity, _prob in DEFAULT_GACHA_PROBS:
-            field_name = f"prob_{rarity}"
-            val_str = request.POST.get(field_name, "").replace(",", ".")
-            try:
-                val_percent = float(val_str)
-            except ValueError:
-                messages.error(request, f"Valor inválido para {ItemRarity(rarity).label}.")
-                return redirect("rpg_gacha_config")
-            prob = val_percent / 100.0
-            if prob < 0:
-                messages.error(request, "Las probabilidades no pueden ser negativas.")
-                return redirect("rpg_gacha_config")
-            new_values[rarity] = prob
-            total += prob
 
-        if abs(total - 1.0) > 0.0001:
-            messages.error(
-                request,
-                "La suma de todas las probabilidades debe ser exactamente 100%. "
-                f"Actualmente es {total * 100:.4f}%."
+        for rarity_code, default_prob in defaults:
+            field_name = f"prob_{rarity_code}"
+
+            raw_val = request.POST.get(field_name, "")
+            val_str = (raw_val or "").strip().replace(",", ".")
+
+            if val_str == "":
+                # si el input viene vacío, usamos el valor actual (o el default)
+                val = float(current_probs.get(rarity_code, default_prob))
+            else:
+                try:
+                    val = float(val_str)
+                except ValueError:
+                    messages.error(
+                        request,
+                        f"Valor inválido para {ItemRarity(rarity_code).label}."
+                    )
+                    return redirect(redirect_name)
+
+            if val < 0 or val > 1:
+                messages.error(
+                    request,
+                    f"La probabilidad de {ItemRarity(rarity_code).label} debe estar entre 0 y 1."
+                )
+                return redirect(redirect_name)
+
+            new_values[rarity_code] = val
+            total += val
+
+        if total > 1.0 + 1e-6:
+            messages.error(request, "La suma de probabilidades no puede superar 1.0.")
+            return redirect(redirect_name)
+
+        # Guardar en BD
+        for rarity_code, default_prob in defaults:
+            obj, _ = GachaProbability.objects.get_or_create(
+                gacha_type=gacha_type,
+                rarity=rarity_code,
             )
-        else:
-            for rarity, prob in new_values.items():
-                obj, _ = GachaProbability.objects.get_or_create(rarity=rarity)
-                obj.probability = prob
-                obj.save()
-            messages.success(request, "Probabilidades actualizadas correctamente.")
-            return redirect("rpg_gacha_config")
+            obj.probability = new_values.get(rarity_code, default_prob)
+            obj.save()
 
-    probs = get_gacha_probs()
+        messages.success(request, "Probabilidades de gacha actualizadas.")
+        return redirect(redirect_name)
+
+    # GET: mostrar tabla
+    probs_raw = get_gacha_probs(gacha_type)
     rows = []
-    for rarity, prob in probs:
+    for code, prob in probs_raw:
         rows.append({
-            "code": rarity,
-            "label": ItemRarity(rarity).label,
-            "percent": prob * 100.0,
+            "code": code,
+            "label": ItemRarity(code).label,
+            "prob": prob,
         })
 
+    ruby_prob = None
+    if gacha_type == GachaType.PREMIUM:
+        ruby_prob = max(0.0, 1.0 - sum(r["prob"] for r in rows))
+
     context = {
+        "gacha_type": gacha_type.value if isinstance(gacha_type, GachaType) else gacha_type,
         "rows": rows,
+        "ruby_prob": ruby_prob,
     }
     return render(request, "notes/rpg_gacha_config.html", context)
+
+
+@login_required
+def rpg_gacha_config(request):
+    # Config del gacha NORMAL
+    return _gacha_config_view(
+        request,
+        gacha_type=GachaType.NORMAL,
+        defaults=DEFAULT_GACHA_PROBS_NORMAL,
+        redirect_name="rpg_gacha_config",
+    )
+
+
+@login_required
+def rpg_gacha_premium_config(request):
+    # Config del gacha PREMIUM
+    return _gacha_config_view(
+        request,
+        gacha_type=GachaType.PREMIUM,
+        defaults=DEFAULT_GACHA_PROBS_PREMIUM,
+        redirect_name="rpg_gacha_premium_config",
+    )
 
 # ============================================================
 #  PVP — helpers

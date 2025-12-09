@@ -218,6 +218,10 @@ class ItemSource(models.TextChoices):
     GACHA = "gacha", "Gacha"
     DROP = "drop", "Drop"
 
+class GachaType(models.TextChoices):
+    NORMAL = "normal", "Gacha normal"
+    PREMIUM = "premium", "Gacha premium"
+
 
 class CombatItem(models.Model):
     owner = models.ForeignKey(
@@ -284,20 +288,26 @@ class TowerBattleResult(models.Model):
 
 
 class GachaProbability(models.Model):
+    gacha_type = models.CharField(
+        max_length=20,
+        choices=GachaType.choices,
+        default=GachaType.NORMAL,
+    )
     rarity = models.CharField(
         max_length=20,
         choices=ItemRarity.choices,
-        unique=True,
     )
     probability = models.FloatField(
-        help_text="Probabilidad entre 0 y 1. La suma de todas las rarezas debe ser 1.0"
+        help_text="Probabilidad entre 0 y 1. La suma de todas las rarezas de ese gacha debe ser ≤ 1.0"
     )
 
     class Meta:
-        ordering = ["rarity"]
+        ordering = ["gacha_type", "rarity"]
+        unique_together = ("gacha_type", "rarity")
 
     def __str__(self):
-        return f"{self.get_rarity_display()}: {self.probability:.6f}"
+        return f"[{self.get_gacha_type_display()}] {self.get_rarity_display()}: {self.probability:.6f}"
+
 
 # --- PVP ARENA -------------------------------------------------------
 
