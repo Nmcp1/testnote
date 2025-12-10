@@ -63,6 +63,9 @@
           <span class="fw-semibold text-warning">
             Monedas: {{ profile.coins }}
           </span>
+          <span class="fw-semibold text-danger">
+            Rubíes: {{ profile.rubies }}
+          </span>
           <a href="{% url 'rpg_hub' %}" class="btn btn-outline-secondary btn-sm">
             ← Volver al Hub RPG
           </a>
@@ -173,6 +176,54 @@
                     </tbody>
                   </table>
                 </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vender rubíes -->
+        <div class="row mt-3">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-body">
+                <h5 class="card-title">Vender rubíes</h5>
+                <p class="text-muted" style="font-size: 0.9rem;">
+                  Puedes cambiar rubíes por monedas de oro. La tasa actual es:
+                  <strong>1 rubí = 2.500 🪙</strong>.
+                </p>
+
+                <form method="post" class="row g-2 align-items-end">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="sell_rubies">
+                  <input type="hidden" name="gtype" value="{{ gacha_type }}">
+
+                  <div class="col-6 col-md-4">
+                    <label for="rubies_to_sell" class="form-label">Cantidad de rubíes</label>
+                    <input type="number"
+                           class="form-control"
+                           id="rubies_to_sell"
+                           name="rubies_to_sell"
+                           min="1"
+                           max="{{ profile.rubies }}"
+                           placeholder="1">
+                  </div>
+
+                  <div class="col-6 col-md-4">
+                    <p class="mb-1 small text-muted">
+                      Recibirás <strong>2.500</strong> monedas por cada rubí.
+                    </p>
+                    <p class="mb-0 fw-semibold">
+                      Disponible: {{ profile.rubies }} rubí(es).
+                    </p>
+                  </div>
+
+                  <div class="col-12 col-md-4 text-md-end">
+                    <button type="submit" class="btn btn-outline-warning">
+                      💎 → 🪙 Vender rubíes
+                    </button>
+                  </div>
+                </form>
 
               </div>
             </div>

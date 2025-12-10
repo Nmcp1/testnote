@@ -1129,9 +1129,40 @@ def rpg_gacha(request):
         action = request.POST.get("action", "roll")
 
         # ----------------------------------------
+        # 0) VENDER RUBÍES
+        # ----------------------------------------
+        if action == "sell_rubies":
+            RUBY_PRICE = 2500
+            qty_str = request.POST.get("rubies_to_sell", "0")
+
+            try:
+                qty = int(qty_str)
+            except ValueError:
+                qty = 0
+
+            if qty <= 0:
+                messages.error(request, "Debes indicar una cantidad válida de rubíes a vender.")
+                return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
+
+            if profile.rubies < qty:
+                messages.error(request, "No tienes suficientes rubíes.")
+                return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
+
+            gained = qty * RUBY_PRICE
+            profile.rubies -= qty
+            profile.coins += gained
+            profile.save()
+
+            messages.success(
+                request,
+                f"Has vendido {qty} rubí(es) por {gained} monedas."
+            )
+            return redirect(f"{reverse('rpg_gacha')}?gtype={current_gacha_type.value}")
+
+        # ----------------------------------------
         # 1) Configurar auto vender
         # ----------------------------------------
-        if action == "config_autosell":
+        elif action == "config_autosell":
             selected = request.POST.getlist("auto_sell")
             profile.auto_sell_rarities = ",".join(selected)
             profile.save()
@@ -1141,7 +1172,7 @@ def rpg_gacha(request):
         # ----------------------------------------
         # 2) Tirada de gacha
         # ----------------------------------------
-        if action == "roll":
+        elif action == "roll":
             # Costes
             NORMAL_COST = 15
             PREMIUM_COST = 300
