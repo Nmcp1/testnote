@@ -6,7 +6,7 @@ from django.utils import timezone
 from expeditions.models import ExpeditionRunResult, ExpeditionDailyPayout
 from notes.views import get_or_create_profile
 
-REWARDS = {1: 600, 2: 400, 3: 200}
+REWARDS = {1: 1000, 2: 500, 3: 300}
 
 
 class Command(BaseCommand):

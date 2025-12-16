@@ -34,9 +34,15 @@ from .services.rewards import (
 )
 
 
+# =========================================================
+# Helpers DB
+# =========================================================
+
 @database_sync_to_async
 def user_in_lobby(lobby_id: int, user_id: int) -> bool:
-    return ExpeditionParticipant.objects.filter(lobby_id=lobby_id, user_id=user_id).exists()
+    return ExpeditionParticipant.objects.filter(
+        lobby_id=lobby_id, user_id=user_id
+    ).exists()
 
 
 @database_sync_to_async
@@ -102,31 +108,36 @@ def get_state(lobby_id: int):
                 "defense": lobby.enemy_defense,
             } if lobby.enemy_hp is not None else None,
             "votes": votes,
+            "last_effect": lobby.last_effect,   # ✅ REGISTRO
         },
         "players": players,
         "chat": [{"user": c["user__username"], "msg": c["message"]} for c in chat],
     }
 
 
+# =========================================================
+# TIMEOUT / FLOW
+# =========================================================
+
 @database_sync_to_async
 def resolve_timeout_step(lobby_id: int) -> dict:
     lobby = ExpeditionLobby.objects.get(id=lobby_id)
 
-    if not lobby.phase_deadline:
-        return {"did": False}
+    alive_ids = list(
+        lobby.participants.filter(is_alive=True)
+        .values_list("user_id", flat=True)
+    )
+    alive_count = len(alive_ids)
 
-    if timezone.now() < lobby.phase_deadline:
-        return {"did": False}
-
-    if lobby.phase == ExpeditionPhase.VOTE_ORDER_1:
+    # =====================================================
+    # FAST-FORWARD: 1 solo jugador vivo
+    # - no timers
+    # - PERO sí decisiones
+    # =====================================================
+    if alive_count <= 1:
         resolve_order_votes(lobby)
-        lobby.set_phase(ExpeditionPhase.VOTE_ORDER_2, seconds=20)
-        return {"did": True, "next": "vote2"}
 
-    if lobby.phase == ExpeditionPhase.VOTE_ORDER_2:
-        resolve_order_votes(lobby)
-
-        # spawn enemigo antes de combate
+        # spawn enemigo
         if lobby.enemy_hp is None:
             enemy = enemy_for_floor(lobby.floor)
             lobby.enemy_hp = enemy.hp
@@ -134,7 +145,82 @@ def resolve_timeout_step(lobby_id: int) -> dict:
             lobby.enemy_defense = enemy.defense
             lobby.save(update_fields=["enemy_hp", "enemy_attack", "enemy_defense"])
 
-        # decisión opcional?
+        # si ya estamos en decisión → resolverla al tiro
+        if lobby.phase == ExpeditionPhase.DECISION:
+            result = resolve_decision_vote(lobby)
+            lobby.last_effect = result
+            lobby.save(update_fields=["last_effect"])
+
+            clear_votes_for_lobby(lobby)
+            lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
+            return {"did": True, "next": "combat"}
+
+        # si venimos de votos u otra fase → generar decisión si corresponde
+        if lobby.phase in (
+            ExpeditionPhase.VOTE_ORDER_1,
+            ExpeditionPhase.VOTE_ORDER_2,
+            ExpeditionPhase.WAITING,
+        ):
+            if maybe_roll_optional_decision(lobby):
+                start_optional_decision(lobby)
+
+                result = resolve_decision_vote(lobby)
+                lobby.last_effect = result
+                lobby.save(update_fields=["last_effect"])
+
+        clear_votes_for_lobby(lobby)
+        lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
+        return {"did": True, "next": "combat"}
+
+    # =====================================================
+    # LÓGICA NORMAL CON DEADLINES
+    # =====================================================
+    if not lobby.phase_deadline:
+        return {"did": False}
+
+    if timezone.now() < lobby.phase_deadline:
+        return {"did": False}
+
+    # -------------------------
+    # VOTE ORDER 1
+    # -------------------------
+    if lobby.phase == ExpeditionPhase.VOTE_ORDER_1:
+        resolve_order_votes(lobby)
+
+        # si quedan solo 2 vivos, no hay vote_order_2
+        if alive_count == 2:
+            if lobby.enemy_hp is None:
+                enemy = enemy_for_floor(lobby.floor)
+                lobby.enemy_hp = enemy.hp
+                lobby.enemy_attack = enemy.attack
+                lobby.enemy_defense = enemy.defense
+                lobby.save(update_fields=["enemy_hp", "enemy_attack", "enemy_defense"])
+
+            if maybe_roll_optional_decision(lobby):
+                start_optional_decision(lobby)
+                lobby.set_phase(ExpeditionPhase.DECISION, seconds=20)
+                return {"did": True, "next": "decision"}
+
+            clear_votes_for_lobby(lobby)
+            lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
+            return {"did": True, "next": "combat"}
+
+        lobby.set_phase(ExpeditionPhase.VOTE_ORDER_2, seconds=20)
+        return {"did": True, "next": "vote2"}
+
+    # -------------------------
+    # VOTE ORDER 2
+    # -------------------------
+    if lobby.phase == ExpeditionPhase.VOTE_ORDER_2:
+        resolve_order_votes(lobby)
+
+        if lobby.enemy_hp is None:
+            enemy = enemy_for_floor(lobby.floor)
+            lobby.enemy_hp = enemy.hp
+            lobby.enemy_attack = enemy.attack
+            lobby.enemy_defense = enemy.defense
+            lobby.save(update_fields=["enemy_hp", "enemy_attack", "enemy_defense"])
+
         if maybe_roll_optional_decision(lobby):
             start_optional_decision(lobby)
             lobby.set_phase(ExpeditionPhase.DECISION, seconds=20)
@@ -144,8 +230,14 @@ def resolve_timeout_step(lobby_id: int) -> dict:
         lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
         return {"did": True, "next": "combat"}
 
+    # -------------------------
+    # DECISION
+    # -------------------------
     if lobby.phase == ExpeditionPhase.DECISION:
-        resolve_decision_vote(lobby)
+        result = resolve_decision_vote(lobby)
+        lobby.last_effect = result
+        lobby.save(update_fields=["last_effect"])
+
         clear_votes_for_lobby(lobby)
         lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
         return {"did": True, "next": "combat"}
@@ -153,11 +245,14 @@ def resolve_timeout_step(lobby_id: int) -> dict:
     return {"did": False}
 
 
+# =========================================================
+# COMBATE
+# =========================================================
+
 @database_sync_to_async
 def run_combat_sync(lobby_id: int):
     lobby = ExpeditionLobby.objects.get(id=lobby_id)
 
-    # Spawn enemigo si falta
     if lobby.enemy_hp is None:
         enemy = enemy_for_floor(lobby.floor)
         lobby.enemy_hp = enemy.hp
@@ -222,7 +317,6 @@ def run_combat_sync(lobby_id: int):
 
     participants_all = list(lobby.participants.all())
 
-    # Si mataron enemigo, aplicar buffs+heal y avanzar
     if enemy_snapshot and killer_id:
         apply_enemy_stat_buffs(participants_all, enemy_snapshot, killer_id)
         apply_end_of_combat_heal(participants_all)
@@ -233,7 +327,16 @@ def run_combat_sync(lobby_id: int):
         lobby.enemy_hp = None
         lobby.enemy_attack = None
         lobby.enemy_defense = None
-        lobby.save(update_fields=["last_killer", "last_enemy_snapshot", "enemy_hp", "enemy_attack", "enemy_defense"])
+
+        # ❌ NO limpiar last_effect aquí
+        lobby.save(update_fields=[
+            "last_killer",
+            "last_enemy_snapshot",
+            "enemy_hp",
+            "enemy_attack",
+            "enemy_defense",
+        ])
+
 
     alive_count = lobby.participants.filter(is_alive=True).count()
     if alive_count == 0:
@@ -253,9 +356,21 @@ def run_combat_sync(lobby_id: int):
         lobby.order_2 = None
         lobby.decision_type = None
         lobby.decision_payload = None
-        lobby.save(update_fields=["floor", "order_1", "order_2", "decision_type", "decision_payload"])
+
+        lobby.save(update_fields=[
+            "floor",
+            "order_1",
+            "order_2",
+            "decision_type",
+            "decision_payload",
+        ])
+
         lobby.set_phase(ExpeditionPhase.VOTE_ORDER_1, seconds=20)
 
+
+# =========================================================
+# CONSUMER
+# =========================================================
 
 class ExpeditionConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -302,7 +417,10 @@ class ExpeditionConsumer(AsyncWebsocketConsumer):
 
     async def broadcast_state(self):
         state = await get_state(self.lobby_id)
-        await self.channel_layer.group_send(self.group_name, {"type": "state_msg", "state": state})
+        await self.channel_layer.group_send(
+            self.group_name,
+            {"type": "state_msg", "state": state}
+        )
 
     async def state_msg(self, event):
         await self.send(text_data=json.dumps({"type": "state", "data": event["state"]}))
@@ -317,21 +435,21 @@ class ExpeditionConsumer(AsyncWebsocketConsumer):
         state = await get_state(self.lobby_id)
         phase = state["lobby"]["phase"]
 
-        if phase not in [ExpeditionPhase.VOTE_ORDER_1, ExpeditionPhase.VOTE_ORDER_2, ExpeditionPhase.DECISION]:
+        if phase not in [
+            ExpeditionPhase.VOTE_ORDER_1,
+            ExpeditionPhase.VOTE_ORDER_2,
+            ExpeditionPhase.DECISION,
+        ]:
             return
 
-        # guardar voto
         await database_sync_to_async(self._cast_vote_and_maybe_resolve)(phase, target_id)
-
         await self.broadcast_state()
 
     def _cast_vote_and_maybe_resolve(self, phase, target_id):
         lobby = ExpeditionLobby.objects.get(id=self.lobby_id)
         cast_vote(lobby, phase, self.scope["user"].id, target_id)
 
-        # si todos votaron, resolvemos en el acto
         if all_alive_voted(lobby, phase):
-            # forzamos deadline vencido para usar el mismo flujo
             lobby.phase_deadline = timezone.now()
             lobby.save(update_fields=["phase_deadline"])
 

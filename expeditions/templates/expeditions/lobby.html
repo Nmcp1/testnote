@@ -97,7 +97,6 @@
     border: 1px solid rgba(255,255,255,0.08);
   }
 
-  /* Slash diagonal para slot vacío */
   .p-card.empty:after{
     content:"";
     position:absolute;
@@ -270,6 +269,17 @@
     color: var(--warn);
   }
 
+  /* ✅ Resultado visual (no rompe nada) */
+  .result-box{
+    border: 1px solid rgba(76,201,240,0.35);
+    background: rgba(76,201,240,0.08);
+  }
+  .result-title{
+    font-weight: 900;
+    margin-bottom: 4px;
+    color: var(--accent);
+  }
+
   .chat-wrap{
     display:flex;
     flex-direction: column;
@@ -338,8 +348,7 @@
         {% csrf_token %}
         <button class="btn btn-sm btn-danger btn-exp" type="submit">🚪 Salir</button>
         </form>
-        {% endif %}
-
+    {% endif %}
   </div>
 
   <div class="grid">
@@ -366,6 +375,12 @@
           <div class="decision-box" id="decisionBox" style="display:none;">
             <div class="decision-title">🎲 Evento Aleatorio</div>
             <div class="muted2" id="decisionText">...</div>
+          </div>
+
+          <!-- ✅ Nuevo: Resultado visual -->
+          <div class="decision-box result-box" id="resultBox" style="display:none;">
+            <div class="result-title">✨ Resultado</div>
+            <div class="muted2" id="resultText">...</div>
           </div>
 
           <div class="muted2" id="voteHelp"></div>
@@ -396,6 +411,8 @@
   let lastState = null;
   let tickInterval = null;
   let uiInterval = null;
+  let lastEffectHash = null;
+  let hideResultTimeout = null;
 
   // Para que el chat NO se borre mientras escribes:
   let chatDraft = "";
@@ -410,6 +427,7 @@
       "vote_order_1": "Votación: quién va primero",
       "vote_order_2": "Votación: quién va segundo",
       "decision": "Decisión",
+      "show_result": "Resultado",
       "combat": "Combate",
       "between": "Entre pisos",
       "ended": "Terminada",
@@ -417,15 +435,136 @@
     return map[phase] || phase;
   }
 
-  function decisionLabel(d){
-    if(!d) return "";
-    const type = d.type;
-    const payload = d.payload || {};
-    if(type === "heal_50") return "Curar 50% HP a un jugador.";
-    if(type === "damage_30") return "Quitar 30% HP a un jugador.";
-    if(type === "give_stats") return `Dar +${payload.amount ?? "?"} a ${payload.stat ?? "stat"}.`;
-    if(type === "remove_stats") return `Quitar -${payload.amount ?? "?"} a ${payload.stat ?? "stat"}.`;
-    return type;
+  // Helpers texto
+  function statName(stat){
+    if(stat === "hp") return "Vida";
+    if(stat === "attack") return "Ataque";
+    if(stat === "defense") return "Defensa";
+    return stat ?? "Stat";
+  }
+  function fmtDelta(n){
+    if(n == null) return "?";
+    const x = Number(n);
+    if(!Number.isFinite(x)) return "?";
+    return x >= 0 ? `+${x}` : `${x}`;
+  }
+  function fmtPct(n){
+    if(n == null) return "?%";
+    const x = Number(n);
+    if(!Number.isFinite(x)) return "?%";
+    return x >= 0 ? `+${x}%` : `${x}%`;
+  }
+
+  // ✅ Texto del evento en curso (antes de votar)
+function decisionLabel(d){
+  if(!d) return "";
+  const type = d.type;
+  const p = d.payload || {};
+
+  // Compatibilidad con tus antiguos
+  if(type === "heal_50") return "Curar 50% HP a un jugador.";
+  if(type === "damage_30") return "Quitar 30% HP a un jugador.";
+  if(type === "give_stats") return `Dar +${p.amount ?? "?"} a ${p.stat ?? "stat"}.`;
+  if(type === "remove_stats") return `Quitar -${p.amount ?? "?"} a ${p.stat ?? "stat"}.`;
+
+  switch(type){
+    case "stat_boon_small":
+      return `✨ Bendición menor: ${fmtDelta(p.delta)} ${statName(p.stat)} (permanente).`;
+    case "stat_boon_big":
+      return `🌟 Bendición mayor: ${fmtDelta(p.delta)} ${statName(p.stat)} (permanente).`;
+    case "stat_curse_small":
+      return `💀 Maldición menor: ${fmtDelta(p.delta)} ${statName(p.stat)} (permanente).`;
+    case "stat_curse_big":
+      return `☠️ Maldición mayor: ${fmtDelta(p.delta)} ${statName(p.stat)} (permanente).`;
+    case "gamble_spike":
+      return `🎲 Apuesta salvaje: gran cambio aleatorio en ${statName(p.stat)} (puede subir o bajar).`;
+    case "reroll_split":
+      return `🔀 Reparto caótico: mover ${p.amount ?? "?"} de ${statName(p.from)} a ${statName(p.to)}.`;
+    case "life_trade":
+      return `❤️‍🩹 Intercambio vital: +${p.hp_gain ?? "?"} Vida, ${fmtDelta(p.penalty)} ${statName(p.penalty_stat)}.`;
+    case "glass_cannon":
+      return `💎 Cañón de cristal: +${p.atk_gain ?? "?"} Ataque, ${fmtDelta(p.def_loss)} Defensa.`;
+    case "turtle":
+      return `🐢 Coraza: +${p.def_gain ?? "?"} Defensa, ${fmtDelta(p.atk_loss)} Ataque.`;
+    case "berserk":
+      return `🩸 Berserk: +${p.atk_gain ?? "?"} Ataque, ${fmtDelta(p.hp_loss)} Vida máxima.`;
+    case "bloodpact":
+      if(p.mode === "atk_up_hp_down"){
+        return `🩸 Pacto de sangre: +${p.atk ?? "?"} Ataque, ${fmtDelta(p.hp)} Vida.`;
+      }
+      return `🩸 Pacto de sangre: +${p.hp ?? "?"} Vida, ${fmtDelta(p.atk)} Ataque.`;
+    case "fortune_wheel":
+      return `🎡 Rueda de la fortuna: resultado permanente aleatorio.`;
+
+    case "hp_percent_shift":
+      return `❤️ Cambio vital: ${fmtPct(p.pct)} Vida máxima (permanente).`;
+    case "atk_percent_shift":
+      return `⚔️ Cambio ofensivo: ${fmtPct(p.pct)} Ataque (permanente).`;
+    case "def_percent_shift":
+      return `🛡️ Cambio defensivo: ${fmtPct(p.pct)} Defensa (permanente).`;
+
+    // ✅ NUEVOS: curaciones (solo current_hp, NO cambia max_hp)
+    case "heal_pct_small":
+      return `💚 Curación menor: +${p.pct ?? "?"}% de vida actual (sin cambiar vida máxima).`;
+    case "heal_pct_big":
+      return `💚 Curación mayor: +${p.pct ?? "?"}% de vida actual (sin cambiar vida máxima).`;
+    case "heal_flat_small":
+      return `🧪 Curación plana menor: +${p.amount ?? "?"} HP actual (sin cambiar vida máxima).`;
+    case "heal_flat_big":
+      return `🧪 Curación plana mayor: +${p.amount ?? "?"} HP actual (sin cambiar vida máxima).`;
+    case "heal_to_full":
+      return `✨ Curación total: llenar la vida actual al máximo.`;
+
+    default:
+      return type;
+  }
+}
+
+
+  // ✅ Texto del resultado aplicado (después de votar / auto-resolver)
+  function effectLabel(e){
+    if(!e) return "";
+    const t = e.type;
+    const target = e.target ?? "?";
+
+    // caso genérico delta
+    if(e.stat && (e.delta !== undefined)){
+      return `Jugador ${target}: ${fmtDelta(e.delta)} ${statName(e.stat)}.`;
+    }
+
+    // reroll_split
+    if(e.from && e.to && (e.amount !== undefined)){
+      return `Jugador ${target}: -${e.amount} ${statName(e.from)} y +${e.amount} ${statName(e.to)}.`;
+    }
+
+    // percent shift (si devuelves pct+diff desde backend)
+    if(e.stat && (e.pct !== undefined)){
+      const diffTxt = (e.diff !== undefined) ? ` (${fmtDelta(e.diff)} puntos)` : "";
+      return `Jugador ${target}: ${fmtPct(e.pct)} ${statName(e.stat)}${diffTxt}.`;
+    }
+
+    // paquetes
+    if(t === "life_trade"){
+      return `Jugador ${target}: +${e.hp_gain} Vida y ${fmtDelta(e.penalty)} ${statName(e.penalty_stat)}.`;
+    }
+    if(t === "glass_cannon"){
+      return `Jugador ${target}: +${e.atk_gain} Ataque y ${fmtDelta(e.def_loss)} Defensa.`;
+    }
+    if(t === "turtle"){
+      return `Jugador ${target}: +${e.def_gain} Defensa y ${fmtDelta(e.atk_loss)} Ataque.`;
+    }
+    if(t === "berserk"){
+      return `Jugador ${target}: +${e.atk_gain} Ataque y ${fmtDelta(e.hp_loss)} Vida máxima.`;
+    }
+    if(t === "bloodpact"){
+      if(e.mode === "atk_up_hp_down"){
+        return `Jugador ${target}: +${e.atk} Ataque y ${fmtDelta(e.hp)} Vida.`;
+      }
+      return `Jugador ${target}: +${e.hp} Vida y ${fmtDelta(e.atk)} Ataque.`;
+    }
+
+    // fallback seguro
+    try { return JSON.stringify(e); } catch { return String(e); }
   }
 
   function safeNum(n, fallback=0){
@@ -514,13 +653,30 @@
     const phase = lobby.phase;
     document.getElementById("phaseTitle").textContent = `Fase: ${phaseLabel(phase)}`;
 
+    const aliveCount = (lastState?.players || []).filter(p => p && p.is_alive).length;
+
     let hint = "";
-    if(phase === "vote_order_1") hint = "Voten quién pelea primero.";
-    else if(phase === "vote_order_2") hint = "Voten quién pelea segundo.";
-    else if(phase === "decision") hint = "Hay una decisión opcional: voten el objetivo.";
-    else if(phase === "combat") hint = "Combate en curso...";
-    else if(phase === "waiting") hint = "Esperando jugadores / iniciar.";
-    else if(phase === "ended") hint = "Expedición terminada.";
+    if(phase === "vote_order_1"){
+      hint = (aliveCount <= 1) ? "Solo queda 1 jugador vivo: orden automático." : "Voten quién pelea primero.";
+    }
+    else if(phase === "vote_order_2"){
+      hint = "Voten quién pelea segundo.";
+    }
+    else if(phase === "decision"){
+      hint = (aliveCount <= 1) ? "Decisión automática (solo queda 1 jugador vivo)." : "Decisión opcional: voten el objetivo.";
+    }
+    else if(phase === "show_result"){
+      hint = "Aplicando efecto...";
+    }
+    else if(phase === "combat"){
+      hint = "Combate en curso...";
+    }
+    else if(phase === "waiting"){
+      hint = "Esperando jugadores / iniciar.";
+    }
+    else if(phase === "ended"){
+      hint = "Expedición terminada.";
+    }
     document.getElementById("phaseHint").textContent = hint;
 
     // Enemy
@@ -533,19 +689,30 @@
       enemyBox.style.display = "none";
     }
 
-    // Decision
+    // Decision (evento antes de aplicar)
     const decisionBox = document.getElementById("decisionBox");
-    if(lobby.decision){
+    if(lobby.decision && phase === "decision"){
       decisionBox.style.display = "block";
       document.getElementById("decisionText").textContent = decisionLabel(lobby.decision);
     }else{
       decisionBox.style.display = "none";
     }
 
+    // Resultado (pausa)
+    const resultBox = document.getElementById("resultBox");
+    if(lobby.last_effect){
+      resultBox.style.display = "block";
+      document.getElementById("resultText").textContent = effectLabel(lobby.last_effect);
+    }else{
+      resultBox.style.display = "none";
+    }
+
     // Vote help
     const vh = document.getElementById("voteHelp");
     if(phase === "vote_order_1" || phase === "vote_order_2" || phase === "decision"){
-      vh.textContent = "Tip: en cuanto TODOS los jugadores vivos voten, se avanza sin esperar los 20s.";
+      vh.textContent = (aliveCount <= 1)
+        ? ""
+        : "Tip: en cuanto TODOS los jugadores vivos voten, se avanza sin esperar los 20s.";
     }else{
       vh.textContent = "";
     }
@@ -553,7 +720,6 @@
 
   function renderChat(chat){
     const log = document.getElementById("chatLog");
-    // Guardar scroll si ya estabas abajo
     const wasNearBottom = (log.scrollTop + log.clientHeight) >= (log.scrollHeight - 30);
 
     log.innerHTML = "";
@@ -611,14 +777,12 @@
   }
 
   socket.onopen = () => {
-    // tick para timeouts
     tickInterval = setInterval(() => {
       if(socket.readyState === WebSocket.OPEN){
         socket.send(JSON.stringify({type:"tick"}));
       }
     }, 1000);
 
-    // timer UI cada 250ms
     uiInterval = setInterval(() => {
       if(lastState?.lobby?.deadline){
         updateTimer(lastState.lobby.deadline);
@@ -638,8 +802,21 @@
     if(payload.type !== "state") return;
 
     lastState = payload.data;
+    // Auto-ocultar resultado si cambia
+    const effect = lastState?.lobby?.last_effect;
+    const effectStr = effect ? JSON.stringify(effect) : null;
 
-    // Reponer draft de chat si había algo
+    if (effectStr && effectStr !== lastEffectHash) {
+      lastEffectHash = effectStr;
+
+      if (hideResultTimeout) clearTimeout(hideResultTimeout);
+      hideResultTimeout = setTimeout(() => {
+        const box = document.getElementById("resultBox");
+        if (box) box.style.display = "none";
+      }, 2000);
+    }
+
+
     if(chatDraft && chatInput.value !== chatDraft){
       chatInput.value = chatDraft;
     }

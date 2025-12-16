@@ -23,11 +23,26 @@ class ExpeditionPhase(models.TextChoices):
 
 
 class DecisionType(models.TextChoices):
-    HEAL_50 = "heal_50", "Curar 50% HP a un jugador"
-    DAMAGE_30 = "damage_30", "Quitar 30% HP a un jugador"
-    GIVE_STATS = "give_stats", "Dar stats aleatorias"
-    REMOVE_STATS = "remove_stats", "Quitar stats aleatorias"
-
+    STAT_BOON_SMALL = "stat_boon_small", "Bendición Menor"
+    STAT_BOON_BIG = "stat_boon_big", "Bendición Mayor"
+    STAT_CURSE_SMALL = "stat_curse_small", "Maldición Menor"
+    STAT_CURSE_BIG = "stat_curse_big", "Maldición Mayor"
+    GAMBLE_SPIKE = "gamble_spike", "Apuesta Salvaje"
+    REROLL_SPLIT = "reroll_split", "Reparto Caótico"
+    LIFE_TRADE = "life_trade", "Intercambio Vital"
+    GLASS_CANNON = "glass_cannon", "Cañón de Cristal"
+    TURTLE = "turtle", "Coraza"
+    BERSERK = "berserk", "Berserk"
+    BLOODPACT = "bloodpact", "Pacto de Sangre"
+    FORTUNE_WHEEL = "fortune_wheel", "Rueda de la Fortuna"
+    HP_PERCENT_SHIFT = "hp_percent_shift", "Cambio % Vida"
+    ATK_PERCENT_SHIFT = "atk_percent_shift", "Cambio % Ataque"
+    DEF_PERCENT_SHIFT = "def_percent_shift", "Cambio % Defensa"
+    HEAL_PCT_SMALL = "heal_pct_small", "Curación % pequeña"
+    HEAL_PCT_BIG = "heal_pct_big", "Curación % grande"
+    HEAL_FLAT_SMALL = "heal_flat_small", "Curación plana pequeña"
+    HEAL_FLAT_BIG = "heal_flat_big", "Curación plana grande"
+    HEAL_TO_FULL = "heal_to_full", "Curación total"
 
 class ExpeditionLobby(models.Model):
     code = models.CharField(max_length=12, unique=True)
@@ -35,6 +50,7 @@ class ExpeditionLobby(models.Model):
 
     status = models.CharField(max_length=20, choices=ExpeditionLobbyStatus.choices, default=ExpeditionLobbyStatus.WAITING)
     phase = models.CharField(max_length=30, choices=ExpeditionPhase.choices, default=ExpeditionPhase.WAITING)
+    last_effect = models.JSONField(null=True, blank=True)  # ✅ registro del último evento aplicado
 
     floor = models.PositiveIntegerField(default=1)
     phase_deadline = models.DateTimeField(null=True, blank=True)
