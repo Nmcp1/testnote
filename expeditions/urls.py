@@ -8,4 +8,5 @@ urlpatterns = [
     path("lobby/<int:lobby_id>/", views.lobby_view, name="expeditions_lobby"),
     path("start/<int:lobby_id>/", views.start_expedition, name="expeditions_start"),
     path("top/", views.expeditions_daily_top, name="expeditions_daily_top"),
+    path("leave/<int:lobby_id>/", views.leave_lobby, name="expeditions_leave"),
 ]

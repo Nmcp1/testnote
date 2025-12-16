@@ -10,9 +10,9 @@ class Enemy:
 
 
 def enemy_for_floor(floor: int) -> Enemy:
-    base_hp = 40
-    base_atk = 8
-    base_def = 2
+    base_hp = 100
+    base_atk = 15
+    base_def = 4
 
     hp = int(base_hp * pow(1.18, floor))
     atk = int(base_atk * pow(1.14, floor))

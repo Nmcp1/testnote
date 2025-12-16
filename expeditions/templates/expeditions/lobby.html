@@ -333,6 +333,13 @@
       </form>
       {% endif %}
     </div>
+    {% if lobby.status == "waiting" %}
+        <form method="post" action="{% url 'expeditions_leave' lobby.id %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-danger btn-exp" type="submit">🚪 Salir</button>
+        </form>
+        {% endif %}
+
   </div>
 
   <div class="grid">
@@ -357,7 +364,7 @@
           </div>
 
           <div class="decision-box" id="decisionBox" style="display:none;">
-            <div class="decision-title">🎲 Decisión opcional</div>
+            <div class="decision-title">🎲 Evento Aleatorio</div>
             <div class="muted2" id="decisionText">...</div>
           </div>
 
@@ -402,7 +409,7 @@
       "waiting": "Esperando jugadores",
       "vote_order_1": "Votación: quién va primero",
       "vote_order_2": "Votación: quién va segundo",
-      "decision": "Decisión (opcional)",
+      "decision": "Decisión",
       "combat": "Combate",
       "between": "Entre pisos",
       "ended": "Terminada",
@@ -414,10 +421,10 @@
     if(!d) return "";
     const type = d.type;
     const payload = d.payload || {};
-    if(type === "heal_50") return "Curar 50% HP a un jugador (voten a quién).";
-    if(type === "damage_30") return "Quitar 30% HP a un jugador (mín 1) (voten a quién).";
-    if(type === "give_stats") return `Dar +${payload.amount ?? "?"} a ${payload.stat ?? "stat"} (voten a quién).`;
-    if(type === "remove_stats") return `Quitar -${payload.amount ?? "?"} a ${payload.stat ?? "stat"} (voten a quién).`;
+    if(type === "heal_50") return "Curar 50% HP a un jugador.";
+    if(type === "damage_30") return "Quitar 30% HP a un jugador.";
+    if(type === "give_stats") return `Dar +${payload.amount ?? "?"} a ${payload.stat ?? "stat"}.`;
+    if(type === "remove_stats") return `Quitar -${payload.amount ?? "?"} a ${payload.stat ?? "stat"}.`;
     return type;
   }
 

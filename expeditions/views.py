@@ -1,12 +1,13 @@
 import random
 import string
 from datetime import timedelta
-
+from expeditions.services.daily_payout_guard import try_pay_daily_top
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .models import (
     ExpeditionLobby,
@@ -39,6 +40,7 @@ def _user_total_coins(user):
 
 @login_required
 def expeditions_hub(request):
+    try_pay_daily_top()
     today = _local_day()
 
     earning, _ = ExpeditionDailyEarning.objects.get_or_create(
@@ -241,3 +243,37 @@ def start_expedition(request, lobby_id: int):
 
     lobby.set_phase(ExpeditionPhase.VOTE_ORDER_1, seconds=20)
     return redirect("expeditions_lobby", lobby_id=lobby.id)
+
+@require_POST
+@login_required
+@transaction.atomic
+def leave_lobby(request, lobby_id: int):
+    lobby = get_object_or_404(ExpeditionLobby.objects.select_for_update(), id=lobby_id)
+
+    # Solo permitir salir antes de iniciar
+    if lobby.status != ExpeditionLobbyStatus.WAITING:
+        messages.error(request, "No puedes salir: la expedición ya comenzó.")
+        return redirect("expeditions_lobby", lobby_id=lobby.id)
+
+    # Borrar participante si existe
+    ExpeditionParticipant.objects.filter(lobby=lobby, user=request.user).delete()
+
+    # Si ya no quedan jugadores, eliminar lobby completo
+    remaining = list(
+        lobby.participants.select_related("user").order_by("joined_at")
+    )
+
+    if len(remaining) == 0:
+        lobby.delete()
+        messages.info(request, "Saliste del lobby. El lobby se eliminó porque quedó vacío.")
+        return redirect("expeditions_hub")
+
+    # Si el creador salió, reasignar creator al primer jugador restante
+    if lobby.creator_id == request.user.id:
+        lobby.creator = remaining[0].user
+        lobby.save(update_fields=["creator"])
+        messages.info(request, f"Saliste del lobby. Nuevo creador: {lobby.creator.username}")
+    else:
+        messages.info(request, "Saliste del lobby.")
+
+    return redirect("expeditions_hub")
