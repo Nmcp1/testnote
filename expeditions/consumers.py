@@ -153,7 +153,30 @@ def resolve_timeout_step(lobby_id: int) -> dict:
             lobby.enemy_defense = enemy.defense
             lobby.save(update_fields=["enemy_hp", "enemy_attack", "enemy_defense"])
 
-        # ❌ No hay decisión con 1 solo jugador
+        # ✅ Si ya estamos en DECISION, resolverla al tiro (sin timer)
+        if lobby.phase == ExpeditionPhase.DECISION:
+            effect = resolve_decision_vote(lobby)
+            lobby.last_effect = effect
+            lobby.save(update_fields=["last_effect"])
+
+            clear_votes_for_lobby(lobby)
+            lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
+            return {"did": True, "next": "combat"}
+
+        # ✅ Si no estamos en DECISION, pero corresponde tirar evento, aplicarlo al tiro
+        # (sin pasar por fase DECISION con 20s)
+        if maybe_roll_optional_decision(lobby):
+            start_optional_decision(lobby)
+
+            effect = resolve_decision_vote(lobby)
+            lobby.last_effect = effect
+            lobby.save(update_fields=["last_effect"])
+
+            clear_votes_for_lobby(lobby)
+            lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
+            return {"did": True, "next": "combat"}
+
+        # Si no salió decisión, a combate
         clear_votes_for_lobby(lobby)
         lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
         return {"did": True, "next": "combat"}
