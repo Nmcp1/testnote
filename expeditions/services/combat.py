@@ -58,8 +58,8 @@ def apply_enemy_stat_buffs(participants, enemy_snapshot: dict | None, killer_use
         if not p.is_alive:
             continue
 
-        base_pct = 0.05
-        killer_pct = 0.15 if killer_user_id and p.user_id == killer_user_id else 0.0
+        base_pct = 0.03
+        killer_pct = 0.09 if killer_user_id and p.user_id == killer_user_id else 0.0
         pct = base_pct + killer_pct
 
         add_hp = int(ehp * pct)
