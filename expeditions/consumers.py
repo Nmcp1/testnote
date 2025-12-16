@@ -123,6 +123,15 @@ def get_state(lobby_id: int):
 def resolve_timeout_step(lobby_id: int) -> dict:
     lobby = ExpeditionLobby.objects.get(id=lobby_id)
 
+    # =====================================================
+    # 🔒 BLOQUEO TOTAL: no avanzar si no está iniciada
+    # =====================================================
+    if lobby.status != ExpeditionLobbyStatus.RUNNING:
+        return {"did": False}
+
+    if lobby.phase == ExpeditionPhase.WAITING:
+        return {"did": False}
+
     alive_ids = list(
         lobby.participants.filter(is_alive=True)
         .values_list("user_id", flat=True)
@@ -130,14 +139,13 @@ def resolve_timeout_step(lobby_id: int) -> dict:
     alive_count = len(alive_ids)
 
     # =====================================================
-    # FAST-FORWARD: 1 solo jugador vivo
-    # - no timers
-    # - PERO sí decisiones
+    # ⚡ FAST-FORWARD: solo 1 jugador vivo
     # =====================================================
     if alive_count <= 1:
+        # Orden automático
         resolve_order_votes(lobby)
 
-        # spawn enemigo
+        # Spawn enemigo si no existe
         if lobby.enemy_hp is None:
             enemy = enemy_for_floor(lobby.floor)
             lobby.enemy_hp = enemy.hp
@@ -145,35 +153,13 @@ def resolve_timeout_step(lobby_id: int) -> dict:
             lobby.enemy_defense = enemy.defense
             lobby.save(update_fields=["enemy_hp", "enemy_attack", "enemy_defense"])
 
-        # si ya estamos en decisión → resolverla al tiro
-        if lobby.phase == ExpeditionPhase.DECISION:
-            result = resolve_decision_vote(lobby)
-            lobby.last_effect = result
-            lobby.save(update_fields=["last_effect"])
-
-            clear_votes_for_lobby(lobby)
-            lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
-            return {"did": True, "next": "combat"}
-
-        # si venimos de votos u otra fase → generar decisión si corresponde
-        if lobby.phase in (
-            ExpeditionPhase.VOTE_ORDER_1,
-            ExpeditionPhase.VOTE_ORDER_2,
-            ExpeditionPhase.WAITING,
-        ):
-            if maybe_roll_optional_decision(lobby):
-                start_optional_decision(lobby)
-
-                result = resolve_decision_vote(lobby)
-                lobby.last_effect = result
-                lobby.save(update_fields=["last_effect"])
-
+        # ❌ No hay decisión con 1 solo jugador
         clear_votes_for_lobby(lobby)
         lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
         return {"did": True, "next": "combat"}
 
     # =====================================================
-    # LÓGICA NORMAL CON DEADLINES
+    # ⏳ Lógica normal con deadline
     # =====================================================
     if not lobby.phase_deadline:
         return {"did": False}
@@ -181,13 +167,13 @@ def resolve_timeout_step(lobby_id: int) -> dict:
     if timezone.now() < lobby.phase_deadline:
         return {"did": False}
 
-    # -------------------------
-    # VOTE ORDER 1
-    # -------------------------
+    # =====================================================
+    # 🗳️ VOTE ORDER 1
+    # =====================================================
     if lobby.phase == ExpeditionPhase.VOTE_ORDER_1:
         resolve_order_votes(lobby)
 
-        # si quedan solo 2 vivos, no hay vote_order_2
+        # Si quedan solo 2 vivos → no hay VOTE_ORDER_2
         if alive_count == 2:
             if lobby.enemy_hp is None:
                 enemy = enemy_for_floor(lobby.floor)
@@ -208,9 +194,9 @@ def resolve_timeout_step(lobby_id: int) -> dict:
         lobby.set_phase(ExpeditionPhase.VOTE_ORDER_2, seconds=20)
         return {"did": True, "next": "vote2"}
 
-    # -------------------------
-    # VOTE ORDER 2
-    # -------------------------
+    # =====================================================
+    # 🗳️ VOTE ORDER 2
+    # =====================================================
     if lobby.phase == ExpeditionPhase.VOTE_ORDER_2:
         resolve_order_votes(lobby)
 
@@ -230,12 +216,14 @@ def resolve_timeout_step(lobby_id: int) -> dict:
         lobby.set_phase(ExpeditionPhase.COMBAT, seconds=None)
         return {"did": True, "next": "combat"}
 
-    # -------------------------
-    # DECISION
-    # -------------------------
+    # =====================================================
+    # 🎲 DECISIÓN
+    # =====================================================
     if lobby.phase == ExpeditionPhase.DECISION:
-        result = resolve_decision_vote(lobby)
-        lobby.last_effect = result
+        effect = resolve_decision_vote(lobby)
+
+        # ✅ Registro visual del resultado
+        lobby.last_effect = effect
         lobby.save(update_fields=["last_effect"])
 
         clear_votes_for_lobby(lobby)
@@ -243,8 +231,6 @@ def resolve_timeout_step(lobby_id: int) -> dict:
         return {"did": True, "next": "combat"}
 
     return {"did": False}
-
-
 # =========================================================
 # COMBATE
 # =========================================================

@@ -8,6 +8,7 @@ from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from django.db.models import Count
 
 from .models import (
     ExpeditionLobby,
@@ -53,6 +54,9 @@ def expeditions_hub(request):
 
     lobbies = (
         ExpeditionLobby.objects
+        .filter(status=ExpeditionLobbyStatus.WAITING, phase=ExpeditionPhase.WAITING)
+        .annotate(pcount=Count("participants"))
+        .filter(pcount__lt=3)
         .order_by("-created_at")[:20]
     )
 
