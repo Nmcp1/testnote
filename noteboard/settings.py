@@ -18,6 +18,7 @@ ALLOWED_HOSTS = ["*"]
 # ---------------------------------------------------------
 
 INSTALLED_APPS = [
+    "daphne",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -26,6 +27,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'notes',  # nuestra app
+
+
+    "channels",
+    "expeditions",
 ]
 
 
@@ -128,3 +133,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'home'
+
+ASGI_APPLICATION = "noteboard.asgi.application"
+
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}

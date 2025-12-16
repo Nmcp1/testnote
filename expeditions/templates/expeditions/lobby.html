@@ -1,0 +1,647 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<style>
+  :root{
+    --bg: #0b0f14;
+    --panel: #0f1620;
+    --panel2: #0c121a;
+    --border: rgba(255,255,255,0.10);
+    --text: #ffffff;
+    --muted: rgba(255,255,255,0.70);
+    --muted2: rgba(255,255,255,0.55);
+    --good: #3ddc84;
+    --bad: #ff5c5c;
+    --warn: #ffcc00;
+    --accent: #4cc9f0;
+  }
+
+  .exp-wrap{
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    color: var(--text);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  .exp-topbar{
+    display:flex;
+    gap: 12px;
+    align-items:center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .muted{ color: var(--muted); font-weight: 600; }
+  .muted2{ color: var(--muted2); font-weight: 600; }
+
+  .grid{
+    display:grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 992px){
+    .grid{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .panel h5{
+    margin: 0 0 10px 0;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+  }
+
+  .players{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 992px){
+    .players{ grid-template-columns: 1fr; }
+  }
+
+  .p-card{
+    position:relative;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 12px;
+    min-height: 170px;
+    overflow:hidden;
+  }
+
+  .p-card.empty{
+    background: #05070a;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  /* Slash diagonal para slot vacío */
+  .p-card.empty:after{
+    content:"";
+    position:absolute;
+    inset:-40px;
+    background: linear-gradient(135deg,
+      rgba(255,255,255,0) 47%,
+      rgba(255,255,255,0.10) 50%,
+      rgba(255,255,255,0) 53%);
+    transform: rotate(0deg);
+    pointer-events:none;
+  }
+
+  .p-head{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .avatar{
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 18px;
+  }
+
+  .p-name{
+    font-weight: 900;
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.1;
+    color: var(--text);
+  }
+
+  .p-sub{
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-weight: 700;
+  }
+
+  .badge-vote{
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    font-weight: 800;
+  }
+  .badge-vote.ok{ color: var(--good); }
+  .badge-vote.wait{ color: var(--warn); }
+
+  .statrow{
+    display:flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .stat{
+    flex: 1;
+    min-width: 90px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px 10px;
+  }
+
+  .stat .k{
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 800;
+    letter-spacing: 0.2px;
+  }
+  .stat .v{
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--text);
+    margin-top: 2px;
+  }
+
+  .hpbar{
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--border);
+    overflow:hidden;
+    margin-top: 8px;
+  }
+  .hpbar > div{
+    height:100%;
+    background: linear-gradient(90deg, rgba(61,220,132,1), rgba(76,201,240,1));
+    width: 0%;
+    transition: width 0.25s ease;
+  }
+
+  .actions{
+    display:flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .btn-exp{
+    border-radius: 12px;
+    font-weight: 900;
+  }
+
+  .phase-box{
+    display:flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .phase-line{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+  }
+
+  .phase-title{
+    font-weight: 900;
+    color: var(--text);
+  }
+
+  .timer{
+    font-weight: 900;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.35);
+    color: var(--accent);
+    min-width: 80px;
+    text-align:center;
+  }
+
+  .enemy-box{
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  .enemy-title{
+    font-weight: 900;
+    margin-bottom: 6px;
+  }
+
+  .decision-box{
+    border: 1px dashed rgba(255,255,255,0.22);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(255,255,255,0.03);
+  }
+
+  .decision-title{
+    font-weight: 900;
+    margin-bottom: 4px;
+    color: var(--warn);
+  }
+
+  .chat-wrap{
+    display:flex;
+    flex-direction: column;
+    height: 420px;
+  }
+
+  .chat-log{
+    flex:1;
+    overflow:auto;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px;
+    background: rgba(0,0,0,0.35);
+    color: var(--text);
+  }
+
+  .chat-msg{
+    margin: 0 0 6px 0;
+    font-size: 13px;
+  }
+
+  .chat-msg b{
+    color: var(--accent);
+  }
+
+  .chat-input{
+    display:flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .chat-input input{
+    flex:1;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    padding: 10px 12px;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .chat-input input::placeholder{
+    color: rgba(255,255,255,0.45);
+  }
+</style>
+
+<div class="exp-wrap">
+  <div class="exp-topbar">
+    <div class="d-flex gap-2 flex-wrap">
+      <span class="pill">🧭 Expedición <span class="muted">#{{ lobby.id }}</span></span>
+      <span class="pill">🔑 Código <span class="muted">{{ lobby.code }}</span></span>
+      <span class="pill">🏔️ Piso <span class="muted" id="floorText">{{ lobby.floor }}</span></span>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-sm btn-outline-light btn-exp" href="{% url 'expeditions_hub' %}">← Volver</a>
+      {% if user.id == lobby.creator_id %}
+      <form method="post" action="{% url 'expeditions_start' lobby.id %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-success btn-exp" type="submit">▶ Iniciar</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- IZQ: HUD + Jugadores -->
+    <div class="panel">
+      <h5>👥 Jugadores</h5>
+      <div class="players" id="playersGrid"></div>
+
+      <div class="panel mt-3" style="background:transparent; border:none; padding:0;">
+        <div class="phase-box">
+          <div class="phase-line">
+            <div>
+              <div class="phase-title" id="phaseTitle">Fase: ...</div>
+              <div class="muted2" id="phaseHint">Esperando...</div>
+            </div>
+            <div class="timer" id="timerBox">--:--</div>
+          </div>
+
+          <div class="enemy-box" id="enemyBox" style="display:none;">
+            <div class="enemy-title">👹 Enemigo del piso</div>
+            <div class="muted2" id="enemyStats">HP: - | ATK: - | DEF: -</div>
+          </div>
+
+          <div class="decision-box" id="decisionBox" style="display:none;">
+            <div class="decision-title">🎲 Decisión opcional</div>
+            <div class="muted2" id="decisionText">...</div>
+          </div>
+
+          <div class="muted2" id="voteHelp"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DER: CHAT -->
+    <div class="panel">
+      <h5>💬 Chat</h5>
+      <div class="chat-wrap">
+        <div class="chat-log" id="chatLog"></div>
+        <div class="chat-input">
+          <input id="chatInput" type="text" placeholder="Escribe un mensaje..." maxlength="300">
+          <button class="btn btn-primary btn-exp" id="chatSendBtn">Enviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const lobbyId = {{ lobby.id }};
+  const wsScheme = (window.location.protocol === "https:") ? "wss" : "ws";
+  const wsUrl = `${wsScheme}://${window.location.host}/ws/expediciones/${lobbyId}/`;
+  const socket = new WebSocket(wsUrl);
+
+  let lastState = null;
+  let tickInterval = null;
+  let uiInterval = null;
+
+  // Para que el chat NO se borre mientras escribes:
+  let chatDraft = "";
+  const chatInput = document.getElementById("chatInput");
+  chatInput.addEventListener("input", () => {
+    chatDraft = chatInput.value;
+  });
+
+  function phaseLabel(phase){
+    const map = {
+      "waiting": "Esperando jugadores",
+      "vote_order_1": "Votación: quién va primero",
+      "vote_order_2": "Votación: quién va segundo",
+      "decision": "Decisión (opcional)",
+      "combat": "Combate",
+      "between": "Entre pisos",
+      "ended": "Terminada",
+    };
+    return map[phase] || phase;
+  }
+
+  function decisionLabel(d){
+    if(!d) return "";
+    const type = d.type;
+    const payload = d.payload || {};
+    if(type === "heal_50") return "Curar 50% HP a un jugador (voten a quién).";
+    if(type === "damage_30") return "Quitar 30% HP a un jugador (mín 1) (voten a quién).";
+    if(type === "give_stats") return `Dar +${payload.amount ?? "?"} a ${payload.stat ?? "stat"} (voten a quién).`;
+    if(type === "remove_stats") return `Quitar -${payload.amount ?? "?"} a ${payload.stat ?? "stat"} (voten a quién).`;
+    return type;
+  }
+
+  function safeNum(n, fallback=0){
+    const x = Number(n);
+    return Number.isFinite(x) ? x : fallback;
+  }
+
+  function renderPlayers(players, lobby){
+    const grid = document.getElementById("playersGrid");
+    grid.innerHTML = "";
+
+    const votes = lobby.votes || [];
+    const phase = lobby.phase;
+    const votedIds = votes.filter(v => v.phase === phase).map(v => v.voter_id);
+
+    players.forEach((p, idx) => {
+      if(!p){
+        const div = document.createElement("div");
+        div.className = "p-card empty";
+        div.innerHTML = `
+          <div class="p-head">
+            <div class="d-flex align-items-center gap-2">
+              <div class="avatar">❔</div>
+              <div>
+                <p class="p-name">Slot vacío</p>
+                <div class="p-sub">Esperando jugador...</div>
+              </div>
+            </div>
+            <span class="badge-vote wait">—</span>
+          </div>
+          <div class="muted2">No hay nadie aquí.</div>
+        `;
+        grid.appendChild(div);
+        return;
+      }
+
+      const isVoted = votedIds.includes(p.user_id);
+      const maxHp = safeNum(p.max_hp, 1);
+      const curHp = safeNum(p.current_hp, 0);
+      const hpPct = Math.max(0, Math.min(100, Math.round((curHp / Math.max(maxHp,1)) * 100)));
+
+      const card = document.createElement("div");
+      card.className = "p-card";
+      card.innerHTML = `
+        <div class="p-head">
+          <div class="d-flex align-items-center gap-2">
+            <div class="avatar">🧑</div>
+            <div>
+              <p class="p-name">${p.user__username}</p>
+              <div class="p-sub">${p.is_alive ? "🟢 Vivo" : "🔴 Muerto"}</div>
+            </div>
+          </div>
+          <span class="badge-vote ${isVoted ? "ok" : "wait"}">
+            ${isVoted ? "🗳️ Votó" : "⌛ No votó"}
+          </span>
+        </div>
+
+        <div class="statrow">
+          <div class="stat">
+            <div class="k">HP</div>
+            <div class="v">${curHp} / ${maxHp}</div>
+          </div>
+          <div class="stat">
+            <div class="k">ATK</div>
+            <div class="v">${p.attack}</div>
+          </div>
+          <div class="stat">
+            <div class="k">DEF</div>
+            <div class="v">${p.defense}</div>
+          </div>
+        </div>
+
+        <div class="hpbar"><div style="width:${hpPct}%"></div></div>
+
+        <div class="actions">
+          <button class="btn btn-sm btn-outline-light btn-exp" ${!p.is_alive ? "disabled":""} onclick="voteFor(${p.user_id})">
+            Votar por ${p.user__username}
+          </button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function updatePhaseUI(lobby){
+    const phase = lobby.phase;
+    document.getElementById("phaseTitle").textContent = `Fase: ${phaseLabel(phase)}`;
+
+    let hint = "";
+    if(phase === "vote_order_1") hint = "Voten quién pelea primero.";
+    else if(phase === "vote_order_2") hint = "Voten quién pelea segundo.";
+    else if(phase === "decision") hint = "Hay una decisión opcional: voten el objetivo.";
+    else if(phase === "combat") hint = "Combate en curso...";
+    else if(phase === "waiting") hint = "Esperando jugadores / iniciar.";
+    else if(phase === "ended") hint = "Expedición terminada.";
+    document.getElementById("phaseHint").textContent = hint;
+
+    // Enemy
+    const enemyBox = document.getElementById("enemyBox");
+    if(lobby.enemy){
+      enemyBox.style.display = "block";
+      document.getElementById("enemyStats").textContent =
+        `HP: ${lobby.enemy.hp} | ATK: ${lobby.enemy.attack} | DEF: ${lobby.enemy.defense}`;
+    }else{
+      enemyBox.style.display = "none";
+    }
+
+    // Decision
+    const decisionBox = document.getElementById("decisionBox");
+    if(lobby.decision){
+      decisionBox.style.display = "block";
+      document.getElementById("decisionText").textContent = decisionLabel(lobby.decision);
+    }else{
+      decisionBox.style.display = "none";
+    }
+
+    // Vote help
+    const vh = document.getElementById("voteHelp");
+    if(phase === "vote_order_1" || phase === "vote_order_2" || phase === "decision"){
+      vh.textContent = "Tip: en cuanto TODOS los jugadores vivos voten, se avanza sin esperar los 20s.";
+    }else{
+      vh.textContent = "";
+    }
+  }
+
+  function renderChat(chat){
+    const log = document.getElementById("chatLog");
+    // Guardar scroll si ya estabas abajo
+    const wasNearBottom = (log.scrollTop + log.clientHeight) >= (log.scrollHeight - 30);
+
+    log.innerHTML = "";
+    chat.forEach(m => {
+      const p = document.createElement("p");
+      p.className = "chat-msg";
+      p.innerHTML = `<b>${m.user}:</b> ${escapeHtml(m.msg)}`;
+      log.appendChild(p);
+    });
+
+    if(wasNearBottom) log.scrollTop = log.scrollHeight;
+  }
+
+  function escapeHtml(s){
+    return (s || "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;");
+  }
+
+  function voteFor(userId){
+    if(!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({type:"vote", target_user_id: userId}));
+  }
+
+  function sendChat(){
+    const msg = chatInput.value.trim();
+    if(!msg) return;
+    socket.send(JSON.stringify({type:"chat", msg}));
+    chatInput.value = "";
+    chatDraft = "";
+  }
+
+  document.getElementById("chatSendBtn").addEventListener("click", sendChat);
+  chatInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){
+      e.preventDefault();
+      sendChat();
+    }
+  });
+
+  function updateTimer(deadlineIso){
+    const box = document.getElementById("timerBox");
+    if(!deadlineIso){
+      box.textContent = "--:--";
+      return;
+    }
+    const dl = new Date(deadlineIso).getTime();
+    const now = Date.now();
+    const diff = Math.max(0, dl - now);
+    const sec = Math.floor(diff / 1000);
+    const mm = String(Math.floor(sec / 60)).padStart(2,"0");
+    const ss = String(sec % 60).padStart(2,"0");
+    box.textContent = `${mm}:${ss}`;
+  }
+
+  socket.onopen = () => {
+    // tick para timeouts
+    tickInterval = setInterval(() => {
+      if(socket.readyState === WebSocket.OPEN){
+        socket.send(JSON.stringify({type:"tick"}));
+      }
+    }, 1000);
+
+    // timer UI cada 250ms
+    uiInterval = setInterval(() => {
+      if(lastState?.lobby?.deadline){
+        updateTimer(lastState.lobby.deadline);
+      }else{
+        updateTimer(null);
+      }
+    }, 250);
+  };
+
+  socket.onclose = () => {
+    if(tickInterval) clearInterval(tickInterval);
+    if(uiInterval) clearInterval(uiInterval);
+  };
+
+  socket.onmessage = (ev) => {
+    const payload = JSON.parse(ev.data);
+    if(payload.type !== "state") return;
+
+    lastState = payload.data;
+
+    // Reponer draft de chat si había algo
+    if(chatDraft && chatInput.value !== chatDraft){
+      chatInput.value = chatDraft;
+    }
+
+    document.getElementById("floorText").textContent = lastState.lobby.floor;
+
+    renderPlayers(lastState.players, lastState.lobby);
+    updatePhaseUI(lastState.lobby);
+    renderChat(lastState.chat);
+  };
+</script>
+{% endblock %}

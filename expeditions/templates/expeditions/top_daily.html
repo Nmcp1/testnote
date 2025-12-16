@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  :root{
+    --bg: #0b0f14;
+    --panel: #0f1620;
+    --border: rgba(255,255,255,0.10);
+    --text: #fff;
+    --muted: rgba(255,255,255,0.7);
+    --accent: #4cc9f0;
+    --warn: #ffcc00;
+  }
+
+  .wrap{
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    color: var(--text);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .rowx{
+    display:flex;
+    justify-content: space-between;
+    align-items:flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    margin-bottom: 10px;
+  }
+
+  .rank{ font-weight: 900; color: var(--warn); min-width: 44px; }
+  .team{ font-weight: 900; }
+  .meta{ color: var(--muted); font-weight: 800; font-size: 12px; }
+  .score{ font-weight: 900; color: var(--accent); }
+
+  .btnx{ border-radius: 12px; font-weight: 900; }
+</style>
+
+<div class="wrap">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h4 style="margin:0; font-weight:900;">🏆 Top diario — {{ day }}</h4>
+      <div class="meta">Ordenado por piso alcanzado (desc) y hora (empates).</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-light btnx" href="{% url 'expeditions_hub' %}">← Volver al HUB</a>
+    </div>
+  </div>
+
+  <div class="panel mt-3">
+    {% if rows %}
+      {% for r in rows %}
+        <div class="rowx">
+          <div class="rank">#{{ r.rank }}</div>
+          <div style="flex:1;">
+            <div class="team">👥 {{ r.members|join:", " }}</div>
+            <div class="meta">Lobby #{{ r.lobby_id }} • {{ r.created_at }}</div>
+          </div>
+          <div class="score">Piso {{ r.floor }}</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="text-center meta" style="padding: 20px;">
+        No hay resultados para este día.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

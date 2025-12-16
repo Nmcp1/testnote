@@ -8,4 +8,5 @@ urlpatterns = [
     path('', home, name='home'),  # página principal con el muro de notas
     path('notes/', include('notes.urls')),  # registro, etc.
     path('accounts/', include('django.contrib.auth.urls')),  # login, logout, password_reset, etc.
+    path("expediciones/", include("expeditions.urls")),
 ]
