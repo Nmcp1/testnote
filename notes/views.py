@@ -390,7 +390,7 @@ def leaderboard(request):
     profiles = (
         UserProfile.objects
         .select_related("user")
-        .order_by("-rubies", "user__username")[:50]
+        .order_by("-coins", "user__username")[:50]
     )
 
     current_user_profile = None
